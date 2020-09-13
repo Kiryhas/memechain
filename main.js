@@ -87,7 +87,7 @@ class CubeManager {
         if (navigator.share) {
             navigator.share({
                 title: 'Play a game of cubes!',
-                text: 'Try to disassemble a pyramid of cubes',
+                text: 'Try to disassemble a pyramid of cubes in this game that is full of fun!',
                 url: location.origin + location.pathname + (this.hasWon ? `?s=${this.scoreBoard.seed}` : '')
             });
         }
