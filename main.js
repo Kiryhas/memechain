@@ -57,6 +57,7 @@ class CubeManager {
         this.newFieldInitHandler = this.newFieldInit.bind(this);
         this.newFieldInitWithSeedHandler = this.newFieldInitWithSeed.bind(this);
         this.popHistoryHandler = this.popHistory.bind(this);
+        this.shareHandler = this.share.bind(this);
 
         this.draggedCube = null;
         this.hoveringOverCube = null;
@@ -87,7 +88,7 @@ class CubeManager {
             navigator.share({
                 title: 'Play a game of cubes!',
                 text: 'Try to disassemble a pyramid of cubes',
-                url: location.origin + location.pathname
+                url: location.origin + location.pathname + `?s=${this.scoreBoard.seed}`
             });
         }
     }
@@ -99,7 +100,7 @@ class CubeManager {
         on('click', back, this.popHistoryHandler);
         on('click', seed, this.newFieldInitWithSeedHandler);
         on('click', reset, _ => this.newFieldInitHandler());
-        on('click', share, this.share);
+        on('click', share, this.shareHandler);
     }
 
     newFieldInitWithSeed() {
