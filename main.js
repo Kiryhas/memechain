@@ -70,9 +70,6 @@ class CubeManager {
         this.addControls();
     }
 
-    static controls = ['back', 'seed', 'reset', 'share'];
-    static oneGroup = [32, 32, 16, 8, 8, 8, 4, 4, 4, 4, 2, 2, 2, 2];
-
     resolveSeedOnInit() {
         let seed = new URL(location.href).searchParams.get('s') ?? void 0;
         if (seed) {
@@ -95,7 +92,7 @@ class CubeManager {
 
 
     addControls() {
-        const [back, seed, reset, share] = CubeManager.controls.map(btn => document.querySelector(`.controls-${btn}`));
+        const [back, seed, reset, share] = ['back', 'seed', 'reset', 'share'].map(btn => document.querySelector(`.controls-${btn}`));
 
         on('click', back, this.popHistoryHandler);
         on('click', seed, this.newFieldInitWithSeedHandler);
@@ -123,7 +120,7 @@ class CubeManager {
     
     generateCubes(seed) {
         const cubes = [0, 1, 2, 3].flatMap(group => (
-            CubeManager.oneGroup.map(value => new Cube(0, 0, 0, value, group))
+            [32, 32, 16, 8, 8, 8, 4, 4, 4, 4, 2, 2, 2, 2].map(value => new Cube(0, 0, 0, value, group))
         ));
         return shuffle(cubes, seed);
     }
