@@ -200,7 +200,6 @@ class CubeManager {
     }
 
     movementEnd(e) {
-        if (e.target != canvas) return;
         const [x, y] = resolveEventPositionOnCanvas(e);
         if (this.draggedCube) {
             const cubeInPositionIndex = this.cubeInPosition(x, y);
