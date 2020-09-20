@@ -187,7 +187,7 @@ class CubeManager {
         }
     }
     movementStart(e) {
-        if (e.target != canvas) return;
+        if (e.target != canvas || this.draggedCube) return;
         const [x, y] = resolveEventPositionOnCanvas(e);
         const cubeInPositionIndex = this.cubeInPosition(x, y);
 
