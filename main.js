@@ -281,8 +281,9 @@ class CubeManager {
                 
                 const [top, left, right] = coveringCubes;
 
-                if (top && (!left || !right)) return Cube.canBeCombined(cube, top);
-                if (!top && left && right) return Cube.canBeCombined(cube, left) || Cube.canBeCombined(cube, right);
+                if (top && (!left || !right)) return !this.cubeIsCovered(top) && Cube.canBeCombined(cube, top);
+                if (!top && left && right) return ((!this.cubeIsCovered(left) && Cube.canBeCombined(cube, left))
+                || (!this.cubeIsCovered(right) && Cube.canBeCombined(cube, right)));
             }
 
             return true;
