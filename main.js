@@ -475,7 +475,7 @@ function resolveEventPositionOnCanvas(e) {
 }
 
 function isValidSeed(seed) {
-    return ((seed.length == 7) || /\d{7}/.test(seed));
+    return (((+seed).toString().length == 7) && /\d{7}/.test(seed));
 }
 
 function scaleCubeSizes(scale = 1) {
