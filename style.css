@@ -25,6 +25,7 @@ html {
     width: 100%;
     transform: translateX(-50%);
     text-align: center;
+    user-select: none;
 }
 .controls button {
     background: linear-gradient(132deg, rgba(207,24,197,1) 0%, rgba(252,145,0,1) 100%);
