@@ -102,8 +102,10 @@ class CubeManager {
 
     newFieldInitWithSeed() {
         const seed = prompt('Enter seed');
-        if (!isValidSeed(seed)) return alert('Seed must be a 7-digit number');
-        this.newFieldInit(+seed);
+        if (seed) {
+            if (isValidSeed(seed)) this.newFieldInit(+seed);
+            else return alert('Seed must be a 7-digit number');
+        }
     }
 
     newFieldInit(seed) {
