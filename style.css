@@ -16,6 +16,8 @@ html {
     display: flex;
     justify-content: center;
     margin-top: 10vh;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .controls {
@@ -25,8 +27,6 @@ html {
     width: 100%;
     transform: translateX(-50%);
     text-align: center;
-    user-select: none;
-    -webkit-user-select: none;
 }
 .controls button {
     background: linear-gradient(132deg, rgba(207,24,197,1) 0%, rgba(252,145,0,1) 100%);
