@@ -9,13 +9,14 @@ if (isMobile) {
     canvas.height = `${outerHeight - 20}`;
     scale = 1 / (INIT_HEIGHT / outerHeight);
 }
-const {width: canvasWidth, height: canvasHeight } = canvas;
+const {width: canvasWidth, height: canvasHeight} = canvas;
 const [CUBE_WIDTH, CUBE_HEIGHT, FONT_SIZE] = scaleCubeSizes(scale);
 const WIDTH_CENTER = (canvasWidth / 2 - CUBE_WIDTH / 2);
 const HEIGHT_CENTER = canvasHeight / 2;
 ctx.strokeStyle = '#fff';
 ctx.setLineDash([15, 10]);
 ctx.lineCap = 'round';
+ctx.textAlign = 'center';   
 const CUBE_COLORS = [
     ['#CF18C5', '#E513C8', '#CD129C'], // purple
     ['#FC9100', '#FF7B00', '#E36B00'], // orange
@@ -43,7 +44,7 @@ class Game {
 
     loop(disable = false) {
         if (this.loopID) cancelAnimationFrame(this.loopID);
-        if (!disable) this.loopID = requestAnimationFrame(this.render.bind(this));
+        if (!disable) this.loopID = requestAnimationFrame(this.renderHandler);
     }
 }
 
@@ -375,14 +376,16 @@ class Cube {
     }
 
     static isInPath(cube, x, y) {
-        return cube.paths.some(path => ctx.isPointInPath(path, x, y));
+        const [,,,backdrop] = cube.paths;
+        return ctx.isPointInPath(backdrop, x, y);
     }
 
     static drawCube(x, y, paths, color, n = 2, stroke = true) {
-        const [top, left, right] = paths;
+        const [top, left, right, backdrop] = paths;
         const [topColor, leftColor, rightColor] = CUBE_COLORS[color];
         ctx.font = `bold ${FONT_SIZE} sans-serif`;
         ctx.fillStyle = topColor;
+        ctx.fill(backdrop);
         ctx.fill(top);
         ctx.fillStyle = leftColor;
         ctx.fill(left);
@@ -394,7 +397,7 @@ class Cube {
             ctx.stroke(right);
         }
         ctx.fillStyle = '#000';
-        ctx.fillText(n, x + CUBE_WIDTH * (.5 - n.toString().length * .05), y * 1.01);
+        ctx.fillText(n, x + CUBE_WIDTH / 2, y + (CUBE_HEIGHT / 64 * 5)) ;
     }
 
     static addCubes(toAdd, toBeAddedTo) {
@@ -415,6 +418,7 @@ class Cube {
         const top = new Path2D();
         const left = new Path2D();
         const right = new Path2D();
+        const backdrop = new Path2D();
         top.moveTo(x, y);
         top.lineTo(x + CUBE_WIDTH / 2, y + CUBE_HEIGHT / 2);
         top.lineTo(x + CUBE_WIDTH, y);
@@ -429,8 +433,16 @@ class Cube {
         right.lineTo(x + CUBE_WIDTH, y + CUBE_HEIGHT);
         right.lineTo(x + CUBE_WIDTH / 2, y + CUBE_HEIGHT * 1.5);
         right.lineTo(x + CUBE_WIDTH / 2, y + CUBE_HEIGHT / 2);
+
+        backdrop.moveTo(x, y);
+        backdrop.lineTo(x, y + CUBE_HEIGHT);
+        backdrop.lineTo(x + CUBE_WIDTH / 2, y + CUBE_HEIGHT * 1.5);
+        backdrop.lineTo(x + CUBE_WIDTH, y + CUBE_HEIGHT);
+        backdrop.lineTo(x + CUBE_WIDTH, y);
+        backdrop.lineTo(x + CUBE_WIDTH / 2, y - CUBE_HEIGHT / 2);
+        backdrop.closePath();
     
-        return [top, left, right];
+        return [top, left, right, backdrop];
     }
 }
 
@@ -438,7 +450,7 @@ class ScoreBoard {
     constructor(seed) {
         this.score = 0;
         this.seed = seed;
-        this.x = WIDTH_CENTER - (isMobile ? CUBE_WIDTH : CUBE_WIDTH / 2);
+        this.x = canvasWidth / 2;
         this.y = HEIGHT_CENTER - CUBE_HEIGHT * 6;
     }
 
