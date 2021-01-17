@@ -9,7 +9,7 @@ if (isMobile) {
     canvas.height = `${outerHeight - 20}`;
     scale = 1 / (INIT_HEIGHT / outerHeight);
 }
-const {width: canvasWidth, height: canvasHeight} = canvas;
+const {width: canvasWidth, height: canvasHeight } = canvas;
 const [CUBE_WIDTH, CUBE_HEIGHT, FONT_SIZE] = scaleCubeSizes(scale);
 const WIDTH_CENTER = (canvasWidth / 2 - CUBE_WIDTH / 2);
 const HEIGHT_CENTER = canvasHeight / 2;
@@ -43,7 +43,7 @@ class Game {
 
     loop(disable = false) {
         if (this.loopID) cancelAnimationFrame(this.loopID);
-        if (!disable) this.loopID = requestAnimationFrame(this.renderHandler);
+        if (!disable) this.loopID = requestAnimationFrame(this.render.bind(this));
     }
 }
 
@@ -419,17 +419,16 @@ class Cube {
         top.lineTo(x + CUBE_WIDTH / 2, y + CUBE_HEIGHT / 2);
         top.lineTo(x + CUBE_WIDTH, y);
         top.lineTo(x + CUBE_WIDTH / 2, y - CUBE_HEIGHT / 2);
-        top.closePath();
+        top.lineTo(x, y);
         left.moveTo(x, y);
         left.lineTo(x, y + CUBE_HEIGHT);
         left.lineTo(x + CUBE_WIDTH / 2, y + CUBE_HEIGHT * 1.5);
         left.lineTo(x + CUBE_WIDTH / 2, y + CUBE_HEIGHT / 2);
-        left.closePath();
+        left.lineTo(x, y);
         right.moveTo(x + CUBE_WIDTH, y);
         right.lineTo(x + CUBE_WIDTH, y + CUBE_HEIGHT);
         right.lineTo(x + CUBE_WIDTH / 2, y + CUBE_HEIGHT * 1.5);
         right.lineTo(x + CUBE_WIDTH / 2, y + CUBE_HEIGHT / 2);
-        right.closePath();
     
         return [top, left, right];
     }
@@ -440,7 +439,7 @@ class ScoreBoard {
         this.score = 0;
         this.seed = seed;
         this.x = WIDTH_CENTER - (isMobile ? CUBE_WIDTH : CUBE_WIDTH / 2);
-        this.y = HEIGHT_CENTER - CUBE_HEIGHT * 5.9;
+        this.y = HEIGHT_CENTER - CUBE_HEIGHT * 6;
     }
 
     addScore(n) {
@@ -483,8 +482,8 @@ function isValidSeed(seed) {
 
 function scaleCubeSizes(scale = 1) {
     scale *= 10;
-    const width = roundToNearestEven(5 * scale);
-    const height = roundToNearestEven(3 * scale);
+    const width = 5 * scale;
+    const height = 3 * scale;
     const fontSize = `${1.1 * scale}px`;
 
     return [width, height, fontSize];
@@ -528,10 +527,6 @@ function getIndex(x = 0, y = 0, z = 0) {
         }
     }
     return pos;
-}
-
-function roundToNearestEven(n) {
-    return 2 * Math.round(n / 2);
 }
 
 function on(events, target, handler) {
