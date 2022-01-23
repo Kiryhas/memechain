@@ -5,9 +5,9 @@ const INIT_HEIGHT = 600;
 const INIT_WIDTH = 800;
 let scale = 1.5;
 if (isMobile) {
-    canvas.width =`${outerWidth - 10}`;
-    canvas.height = `${outerHeight - 20}`;
-    scale = 1 / (INIT_HEIGHT / outerHeight);
+    canvas.width =`${innerWidth - 10}`;
+    canvas.height = `${innerHeight - 20}`;
+    scale = 1 / (INIT_HEIGHT / innerHeight);
 }
 const {width: canvasWidth, height: canvasHeight} = canvas;
 const [CUBE_WIDTH, CUBE_HEIGHT, FONT_SIZE] = scaleCubeSizes(scale);
