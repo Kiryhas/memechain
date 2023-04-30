@@ -349,6 +349,7 @@ class CubeManager {
             this.scoreBoard.addScore(this.draggedCube.value);
             this.releaseCube();
         }
+        this.history = history;
         this.updateGameStatus();
     }
 }
