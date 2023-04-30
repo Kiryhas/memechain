@@ -339,6 +339,7 @@ class CubeManager {
             Cube.addCubes(draggedCube, toCube);
             this.releaseCube();
         }
+        this.updateGameStatus();
     }
 }
 
