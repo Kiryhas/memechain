@@ -74,7 +74,7 @@ class CubeManager {
     resolveSeedOnInit() {
         let seed = +(new URL(location.href).searchParams.get('s')) ?? void 0;
         if (seed) {
-            // history.replaceState({}, '', location.pathname);
+            history.replaceState({}, '', location.pathname);
             if (!isValidSeed(seed)) seed = void 0;
         }
 
@@ -110,7 +110,6 @@ class CubeManager {
     }
 
     newFieldInit(seed) {
-        console.log(seed);
         if (this.hasWon) {
             this.hasWon = false;
             this.listenToCubeEvents();
