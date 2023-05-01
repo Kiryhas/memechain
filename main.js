@@ -5,18 +5,18 @@ const INIT_HEIGHT = 600;
 const INIT_WIDTH = 800;
 let scale = 1.5;
 if (isMobile) {
-    canvas.width =`${innerWidth - 10}`;
+    canvas.width = `${innerWidth - 10}`;
     canvas.height = `${innerHeight - 20}`;
     scale = 1 / (INIT_HEIGHT / innerHeight);
 }
-const {width: canvasWidth, height: canvasHeight} = canvas;
+const { width: canvasWidth, height: canvasHeight } = canvas;
 const [CUBE_WIDTH, CUBE_HEIGHT, FONT_SIZE] = scaleCubeSizes(scale);
 const WIDTH_CENTER = (canvasWidth / 2 - CUBE_WIDTH / 2);
 const HEIGHT_CENTER = canvasHeight / 2;
 ctx.strokeStyle = '#fff';
 ctx.setLineDash([15, 10]);
 ctx.lineCap = 'round';
-ctx.textAlign = 'center';   
+ctx.textAlign = 'center';
 const CUBE_COLORS = [
     ['#CF18C5', '#E513C8', '#CD129C'], // purple
     ['#FC9100', '#FF7B00', '#E36B00'], // orange
@@ -72,7 +72,7 @@ class CubeManager {
     }
 
     resolveSeedOnInit() {
-        let seed = new URL(location.href).searchParams.get('s') ?? void 0;
+        let seed = +(new URL(location.href).searchParams.get('s')) ?? void 0;
         if (seed) {
             history.replaceState({}, '', location.pathname);
             if (!isValidSeed(seed)) seed = void 0;
@@ -120,7 +120,7 @@ class CubeManager {
         this.initPositions();
         this.scoreBoard = new ScoreBoard(this.seed);
     }
-    
+
     generateCubes(seed) {
         const cubes = [0, 1, 2, 3].flatMap(group => (
             [32, 32, 16, 8, 8, 8, 4, 4, 4, 4, 2, 2, 2, 2].map(value => new Cube(0, 0, 0, value, group))
@@ -147,21 +147,29 @@ class CubeManager {
 
     cubeInPosition(x, y) {
         const [cubeInPosition] = this.cubes
-        .filter(cube => !cube.dragging && !cube.disabled && Cube.isInPath(cube, x, y))
-        .sort((a, b) => b.z - a.z);
+            .filter(cube => !cube.dragging && !cube.disabled && Cube.isInPath(cube, x, y))
+            .sort((a, b) => b.z - a.z);
         return this.cubes.indexOf(cubeInPosition);
     }
 
-    cubeIsCovered(cube) {
+    cubeIsCovered(cube, excludeCube) {
+        if (!excludeCube) excludeCube = this.cubes.find(cube => cube.dragging);
+
         const cubeIndex = this.cubes.indexOf(cube);
-        const {cubeCoordinates: [x, y, z]} = cube;
-        const indexOfCubeAbove = this.cubes.findIndex(({cubeCoordinates: [xAbove, yAbove, zAbove]}) => {
+        const { cubeCoordinates: [x, y, z] } = cube;
+        const indexOfCubeAbove = this.cubes.findIndex(({ cubeCoordinates: [xAbove, yAbove, zAbove] }) => {
             return xAbove == x - 1 && yAbove == y && zAbove == z;
         });
+        const indexOfCubeInFront = this.cubes.findIndex(({ cubeCoordinates: [xAbove, yAbove, zAbove] }) => {
+            return xAbove == x - 1 && yAbove == y + 2 && zAbove == z + 1;
+        });
+        const cubeAbove = this.cubes[indexOfCubeAbove];
+        const cubeInFront = this.cubes[indexOfCubeInFront];
 
-        if (indexOfCubeAbove > cubeIndex && !this.cubes[indexOfCubeAbove]?.disabled && !this.cubes[indexOfCubeAbove]?.dragging) {
-            return true;
-        }
+        if (
+            (indexOfCubeAbove > cubeIndex && !cubeAbove?.disabled && cubeAbove != excludeCube) ||
+            (indexOfCubeInFront > cubeIndex && !cubeInFront?.disabled && cubeInFront != excludeCube)
+        ) return true;
 
         return false;
     }
@@ -196,7 +204,7 @@ class CubeManager {
 
         if (cubeInPositionIndex >= 0 && !this.cubeIsCovered(this.cubes[cubeInPositionIndex])) {
             this.dragCube(cubeInPositionIndex);
-            const {x: startX, y: startY} = this.draggedCube;
+            const { x: startX, y: startY } = this.draggedCube;
             this.draggedCube.setComplement(x - startX, y - startY);
             on('touchmove mousemove', canvas, this.draggingCubeHandler);
         }
@@ -220,7 +228,7 @@ class CubeManager {
 
         this.updateGameStatus();
     }
-    
+
     updateGameStatus() {
         if (this.winCondition()) {
             this.hasWon = true;
@@ -263,11 +271,11 @@ class CubeManager {
     }
 
     coveringCubes(cube) {
-        const {cubeCoordinates: [x, y, z]} = cube;
+        const { cubeCoordinates: [x, y, z] } = cube;
         if (x == 1) return [];
         const activeCubesAbove = this.cubes.filter(activeCube => !activeCube.disabled && activeCube.cubeCoordinates[0] == x - 1 && activeCube != cube);
 
-        const cubeFilter = (y, z) => ({cubeCoordinates: [,cubeY,cubeZ]}) => cubeY == y && cubeZ == z;
+        const cubeFilter = (y, z) => ({ cubeCoordinates: [, cubeY, cubeZ] }) => cubeY == y && cubeZ == z;
         const topCubeFilter = cubeFilter(y + 2, z + 1);
         const leftCubeFilter = cubeFilter(y + 1, z);
         const rightCubeFilter = cubeFilter(y + 1, z + 1);
@@ -278,15 +286,15 @@ class CubeManager {
     thereArePossibleCombinations() {
         const freeCubes = this.cubes.filter(cube => !cube.disabled && !this.cubeIsCovered(cube)).filter(cube => {
             const coveringCubes = this.coveringCubes(cube);
-            const {length} = coveringCubes.filter(Boolean);
+            const { length } = coveringCubes.filter(Boolean);
             if (length) {
                 if (length == 3) return false;
-                
+
                 const [top, left, right] = coveringCubes;
 
                 if (top && (!left || !right)) return !this.cubeIsCovered(top) && Cube.canBeCombined(cube, top);
                 if (!top && left && right) return ((!this.cubeIsCovered(left) && Cube.canBeCombined(cube, left))
-                || (!this.cubeIsCovered(right) && Cube.canBeCombined(cube, right)));
+                    || (!this.cubeIsCovered(right) && Cube.canBeCombined(cube, right)));
             }
 
             return true;
@@ -298,14 +306,14 @@ class CubeManager {
         }
 
         return freeCubes.some(cube => {
-            const {cubeCoordinates: [x, y, z]} = cube;
+            const { cubeCoordinates: [x, y, z] } = cube;
             if (x == 6) return false;
             const cubeBelow = this.cubes.find(cubeBelow => {
-                const {cubeCoordinates: [xBelow, yBelow, zBelow]} = cubeBelow;
+                const { cubeCoordinates: [xBelow, yBelow, zBelow] } = cubeBelow;
                 return x + 1 == xBelow && y == yBelow && z == zBelow;
             });
 
-            return Cube.canBeCombined(cubeBelow, cube);
+            return !this.cubeIsCovered(cubeBelow, cube) && Cube.canBeCombined(cube, cubeBelow);
         });
     }
 
@@ -315,7 +323,7 @@ class CubeManager {
             for (const cube of this.cubes) {
                 if (!cube.dragging && !cube.disabled) cube.draw();
             }
-            
+
             if (this.draggedCube) this.draggedCube.draw();
         } else {
             for (const cube of this.cubes) {
@@ -324,6 +332,25 @@ class CubeManager {
         }
     }
 
+    injectHistory(history) {
+        for (let [from, to] of history) {
+            const draggedCube = this.cubes[from];
+            const toCube = this.cubes[to];
+
+            this.dragCube(from);
+            if (
+                this.cubeIsCovered(toCube) ||
+                !Cube.canBeCombined(draggedCube, toCube)
+            ) {
+                throw new Error('Invalid history');
+            }
+            Cube.addCubes(draggedCube, toCube);
+            this.scoreBoard.addScore(this.draggedCube.value);
+            this.releaseCube();
+        }
+        this.history = history;
+        this.updateGameStatus();
+    }
 }
 
 class Cube {
@@ -344,12 +371,12 @@ class Cube {
     }
 
     savePosition() {
-        const {x, y} = this;
+        const { x, y } = this;
         this.restorePosition = () => {
             this.updatePosition(x, y);
         }
     }
-    
+
     setComplement(x = 0, y = 0) {
         this.xComplement = x, this.yComplement = y;
     }
@@ -376,7 +403,7 @@ class Cube {
     }
 
     static isInPath(cube, x, y) {
-        const [,,,backdrop] = cube.paths;
+        const [, , , backdrop] = cube.paths;
         return ctx.isPointInPath(backdrop, x, y);
     }
 
@@ -397,7 +424,7 @@ class Cube {
             ctx.stroke(right);
         }
         ctx.fillStyle = '#000';
-        ctx.fillText(n, x + CUBE_WIDTH / 2, y + (CUBE_HEIGHT / 64 * 5)) ;
+        ctx.fillText(n, x + CUBE_WIDTH / 2, y + (CUBE_HEIGHT / 64 * 5));
     }
 
     static addCubes(toAdd, toBeAddedTo) {
@@ -441,7 +468,7 @@ class Cube {
         backdrop.lineTo(x + CUBE_WIDTH, y);
         backdrop.lineTo(x + CUBE_WIDTH / 2, y - CUBE_HEIGHT / 2);
         backdrop.closePath();
-    
+
         return [top, left, right, backdrop];
     }
 }
@@ -470,16 +497,29 @@ class ScoreBoard {
     }
 }
 
+class SeededRandom {
+    constructor(seed = +String(Math.floor(Math.random() * 10e6)).padStart(7, '1')) {
+        this.seed = seed;
+        this.seedOffset = 0;
+    }
+
+    get() {
+        const x = Math.sin(this.seed + this.seedOffset) * 10000;
+        this.seedOffset++;
+        return x - Math.floor(x);
+    }
+}
+
 const game = new Game();
 
 function resolveEventPositionOnCanvas(e) {
     const isMobile = window.TouchEvent && e instanceof TouchEvent;
     const boundingRect = canvas.getBoundingClientRect();
-    const {clientX, clientY} = e, {left, top} = boundingRect;
+    const { clientX, clientY } = e, { left, top } = boundingRect;
     let x, y;
 
     if (isMobile) {
-        const [{clientX: touchX, clientY: touchY}] = e.touches.length ? e.touches : e.changedTouches;
+        const [{ clientX: touchX, clientY: touchY }] = e.touches.length ? e.touches : e.changedTouches;
         x = touchX - left, y = touchY - top;
     } else if (e.button == 0) {
         x = clientX - left, y = clientY - top;
@@ -503,18 +543,14 @@ function scaleCubeSizes(scale = 1) {
 
 function shuffle(array, seed = +String(Math.floor(Math.random() * 10e6)).padStart(7, '1')) {
     const shuffledArray = [...array];
-    let currentIndex = shuffledArray.length, seedOffset = 0, temporaryValue, randomIndex;
-    const random = () => {
-        const x = Math.sin(seed + seedOffset) * 10000;
-        seedOffset++;
-        return x - Math.floor(x);
-    }
+    let currentIndex = shuffledArray.length, temporaryValue, randomIndex;
+    const random = new SeededRandom(seed);
     while (currentIndex) {
-      randomIndex = Math.floor(random() * currentIndex);
-      currentIndex--;
-      temporaryValue = shuffledArray[currentIndex];
-      shuffledArray[currentIndex] = shuffledArray[randomIndex];
-      shuffledArray[randomIndex] = temporaryValue;
+        randomIndex = Math.floor(random.get() * currentIndex);
+        currentIndex--;
+        temporaryValue = shuffledArray[currentIndex];
+        shuffledArray[currentIndex] = shuffledArray[randomIndex];
+        shuffledArray[randomIndex] = temporaryValue;
     }
     return [shuffledArray, seed];
 }
