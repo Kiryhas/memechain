@@ -131,14 +131,17 @@ class CubeManager {
     initPositions() {
         let startX = WIDTH_CENTER + CUBE_WIDTH / 2;
         let startY = HEIGHT_CENTER;
+        let cubeIndex = 0;
         for (let x = 6; x > 0; x--) {
             for (let y = 1; y <= x; y++) {
                 let currentRowX = startX - y * CUBE_WIDTH / 2;
                 const currentRowY = (startY + y * CUBE_HEIGHT / 2);
                 for (let z = 0; z < y; z++) {
-                    this.cubes[getIndex(x, y, z)].updatePosition(currentRowX, currentRowY, 6 - x + y);
-                    this.cubes[getIndex(x, y, z)].cubeCoordinates = [x, y, z];
+                    this.cubes[cubeIndex].updatePosition(currentRowX, currentRowY, 6 - x + y);
+                    this.cubes[cubeIndex].cubeCoordinates = [x, y, z];
+
                     currentRowX += CUBE_WIDTH;
+                    cubeIndex++;
                 }
             }
             startY = startY - CUBE_HEIGHT;
@@ -534,28 +537,6 @@ function shuffle(array, seed = +String(Math.floor(Math.random() * 10e6)).padStar
         shuffledArray[randomIndex] = temporaryValue;
     }
     return [shuffledArray, seed];
-}
-
-function rowSum(n) {
-    return (n * (n + 1)) / 2;
-}
-
-function getIndex(x = 0, y = 0, z = 0) {
-    let pos = z;
-    let lastFullRow = y - 1;
-    if (lastFullRow > 0) {
-        pos += rowSum(lastFullRow);
-    }
-    let currentFloor = 6 - x;
-
-    if (currentFloor != 0) {
-        let nRows = 7 - currentFloor;
-
-        for (let floor = currentFloor; floor > 0; floor--, nRows++) {
-            pos += rowSum(nRows);
-        }
-    }
-    return pos;
 }
 
 function on(events, target, handler) {
