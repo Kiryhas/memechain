@@ -186,6 +186,8 @@ class CubeManager {
             this.draggedCube.dragging = false;
             this.draggedCube.setComplement();
             this.draggedCube.restorePosition();
+            this.draggedCube.opacity = 1;
+            this.draggedCube.stroke = false;
             delete this.draggedCube;
         }
     }
@@ -244,6 +246,11 @@ class CubeManager {
             if (cubeInPositionIndex >= 0 && Cube.canBeCombined(this.draggedCube, cubeInPosition) && !this.cubeIsCovered(cubeInPosition)) {
                 this.hoveringOverCube = cubeInPosition;
                 cubeInPosition.stroke = true;
+                this.draggedCube.opacity = 0.5;
+                this.draggedCube.stroke = true;
+            } else {
+                this.draggedCube.stroke = false;
+                this.draggedCube.opacity = 1;
             }
         }
     }
@@ -340,6 +347,7 @@ class Cube {
         this.xComplement = 0;
         this.yComplement = 0;
         this.rotation = 0;
+        this.opacity = 1;
         this.updatePosition(x, y);
     }
 
@@ -362,7 +370,7 @@ class Cube {
     }
 
     draw() {
-        Cube.drawCube(this.x, this.y, this.paths, this.color, this.value, this.stroke);
+        Cube.drawCube(this.x, this.y, this.paths, this.color, this.value, this.stroke, this.opacity);
     }
 
     drawRotate() {
@@ -380,9 +388,14 @@ class Cube {
         return ctx.isPointInPath(backdrop, x, y);
     }
 
-    static drawCube(x, y, paths, color, n = 2, stroke = true) {
+    static drawCube(x, y, paths, color, n = 2, stroke = true, opacity = 1) {
         const [top, left, right, backdrop] = paths;
         const [topColor, leftColor, rightColor] = CUBE_COLORS[color];
+
+        if (opacity !== 1) {
+            ctx.globalAlpha = opacity;
+        }
+
         ctx.font = `bold ${FONT_SIZE} sans-serif`;
         ctx.fillStyle = topColor;
         ctx.fill(backdrop);
@@ -391,11 +404,15 @@ class Cube {
         ctx.fill(left);
         ctx.fillStyle = rightColor;
         ctx.fill(right);
+
+        ctx.globalAlpha = 1;
+
         if (stroke) {
             ctx.stroke(top);
             ctx.stroke(left);
             ctx.stroke(right);
         }
+
         ctx.fillStyle = '#000';
         ctx.fillText(n, x + CUBE_WIDTH / 2, y + (CUBE_HEIGHT / 64 * 5));
     }
