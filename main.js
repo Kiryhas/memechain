@@ -152,16 +152,24 @@ class CubeManager {
         return this.cubes.indexOf(cubeInPosition);
     }
 
-    cubeIsCovered(cube) {
+    cubeIsCovered(cube, cubeToIgnore) {
+        if (!cubeToIgnore) cubeToIgnore = this.cubes.find(cube => cube.dragging);
+
         const cubeIndex = this.cubes.indexOf(cube);
         const { cubeCoordinates: [x, y, z] } = cube;
         const indexOfCubeAbove = this.cubes.findIndex(({ cubeCoordinates: [xAbove, yAbove, zAbove] }) => {
             return xAbove == x - 1 && yAbove == y && zAbove == z;
         });
+        const indexOfCubeInFront = this.cubes.findIndex(({ cubeCoordinates: [xAbove, yAbove, zAbove] }) => {
+            return xAbove == x - 1 && yAbove == y + 2 && zAbove == z + 1;
+        });
+        const cubeAbove = this.cubes[indexOfCubeAbove];
+        const cubeInFront = this.cubes[indexOfCubeInFront];
 
-        if (indexOfCubeAbove > cubeIndex && !this.cubes[indexOfCubeAbove]?.disabled && !this.cubes[indexOfCubeAbove]?.dragging) {
-            return true;
-        }
+        if (
+            (indexOfCubeAbove > cubeIndex && !cubeAbove?.disabled && cubeAbove != cubeToIgnore) ||
+            (indexOfCubeInFront > cubeIndex && !cubeInFront?.disabled && cubeInFront != cubeToIgnore)
+        ) return true;
 
         return false;
     }
@@ -305,7 +313,7 @@ class CubeManager {
                 return x + 1 == xBelow && y == yBelow && z == zBelow;
             });
 
-            return Cube.canBeCombined(cubeBelow, cube);
+            return !this.cubeIsCovered(cubeBelow, cube) && Cube.canBeCombined(cube, cubeBelow);
         });
     }
 
