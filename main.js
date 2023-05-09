@@ -138,7 +138,7 @@ class CubeManager {
                 const currentRowY = (startY + y * CUBE_HEIGHT / 2);
                 for (let z = 0; z < y; z++) {
                     this.cubes[cubeIndex].updatePosition(currentRowX, currentRowY, 6 - x + y);
-                    this.cubes[cubeIndex].cubeCoordinates = [x, y, z];
+                    this.cubes[cubeIndex].coordinates = [x, y, z];
 
                     currentRowX += CUBE_WIDTH;
                     cubeIndex++;
@@ -156,17 +156,12 @@ class CubeManager {
     }
 
     cubeIsCovered(cube) {
-        const cubeIndex = this.cubes.indexOf(cube);
-        const { cubeCoordinates: [x, y, z] } = cube;
-        const indexOfCubeAbove = this.cubes.findIndex(({ cubeCoordinates: [xAbove, yAbove, zAbove] }) => {
+        const { coordinates: [x, y, z] } = cube;
+        const cubeAbove = this.cubes.find(({ coordinates: [xAbove, yAbove, zAbove] }) => {
             return xAbove == x - 1 && yAbove == y && zAbove == z;
         });
 
-        if (indexOfCubeAbove > cubeIndex && !this.cubes[indexOfCubeAbove]?.disabled && !this.cubes[indexOfCubeAbove]?.dragging) {
-            return true;
-        }
-
-        return false;
+        return cubeAbove && !cubeAbove.disabled && !cubeAbove.dragging;
     }
 
     popHistory() {
@@ -273,11 +268,11 @@ class CubeManager {
     }
 
     coveringCubes(cube) {
-        const { cubeCoordinates: [x, y, z] } = cube;
+        const { coordinates: [x, y, z] } = cube;
         if (x == 1) return [];
-        const activeCubesAbove = this.cubes.filter(activeCube => !activeCube.disabled && activeCube.cubeCoordinates[0] == x - 1 && activeCube != cube);
+        const activeCubesAbove = this.cubes.filter(activeCube => !activeCube.disabled && activeCube.coordinates[0] == x - 1 && activeCube != cube);
 
-        const cubeFilter = (y, z) => ({ cubeCoordinates: [, cubeY, cubeZ] }) => cubeY == y && cubeZ == z;
+        const cubeFilter = (y, z) => ({ coordinates: [, cubeY, cubeZ] }) => cubeY == y && cubeZ == z;
         const topCubeFilter = cubeFilter(y + 2, z + 1);
         const leftCubeFilter = cubeFilter(y + 1, z);
         const rightCubeFilter = cubeFilter(y + 1, z + 1);
@@ -308,14 +303,18 @@ class CubeManager {
         }
 
         return freeCubes.some(cube => {
-            const { cubeCoordinates: [x, y, z] } = cube;
+            const { coordinates: [x, y, z] } = cube;
             if (x == 6) return false;
             const cubeBelow = this.cubes.find(cubeBelow => {
-                const { cubeCoordinates: [xBelow, yBelow, zBelow] } = cubeBelow;
+                const { coordinates: [xBelow, yBelow, zBelow] } = cubeBelow;
                 return x + 1 == xBelow && y == yBelow && z == zBelow;
             });
+            const cubeInFront = this.cubes.find(cube => {
+                const { coordinates: [frontalX, frontalY, frontalZ] } = cube;
+                return frontalX === x && frontalY === y + 1 && frontalZ === z;
+            });
 
-            return Cube.canBeCombined(cubeBelow, cube);
+            return !cubeInFront && Cube.canBeCombined(cubeBelow, cube);
         });
     }
 
@@ -351,7 +350,6 @@ class Cube {
         this.yComplement = 0;
         this.rotation = 0;
         this.opacity = 1;
-        this.updatePosition(x, y);
     }
 
     savePosition() {
