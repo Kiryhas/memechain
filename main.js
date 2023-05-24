@@ -129,36 +129,32 @@ class CubeManager {
     }
 
     initPositions() {
-        let startX = WIDTH_CENTER + CUBE_WIDTH / 2;
-        let startY = HEIGHT_CENTER;
         let cubeIndex = 0;
-        for (let x = 6; x > 0; x--) {
-            for (let y = 1; y <= x; y++) {
-                let currentRowX = startX - y * CUBE_WIDTH / 2;
-                const currentRowY = (startY + y * CUBE_HEIGHT / 2);
-                for (let z = 0; z < y; z++) {
-                    this.cubes[cubeIndex].updatePosition(currentRowX, currentRowY, 6 - x + y);
+        const calculateX = (x, z) => (WIDTH_CENTER) + (x * CUBE_WIDTH / 2) - (z * CUBE_WIDTH / 2);
+        const calculateY = (x, y, z) => (HEIGHT_CENTER + CUBE_HEIGHT / 2) - y * CUBE_HEIGHT + (z + x) * CUBE_HEIGHT / 2;
+        for (let y = 0; y < 6; y++) {
+            for (let x = 0; x < 6 - y; x++) {
+                for (let z = 0; z < 6 - x - y; z++) {
+                    this.cubes[cubeIndex].updatePosition(calculateX(x, z), calculateY(x, y, z));
                     this.cubes[cubeIndex].coordinates = [x, y, z];
-
-                    currentRowX += CUBE_WIDTH;
+                    this.cubes[cubeIndex].index = cubeIndex;
                     cubeIndex++;
                 }
             }
-            startY = startY - CUBE_HEIGHT;
         }
     }
 
     cubeInPosition(x, y) {
         const [cubeInPosition] = this.cubes
             .filter(cube => !cube.dragging && !cube.disabled && Cube.isInPath(cube, x, y))
-            .sort((a, b) => b.z - a.z);
+            .sort(({ coordinates: [xA, yA, zA] }, { coordinates: [xB, yB, zB] }) => xB + yB + zB - xA - yA - zA);
         return this.cubes.indexOf(cubeInPosition);
     }
 
     cubeIsCovered(cube) {
         const { coordinates: [x, y, z] } = cube;
         const cubeAbove = this.cubes.find(({ coordinates: [xAbove, yAbove, zAbove] }) => {
-            return xAbove == x - 1 && yAbove == y && zAbove == z;
+            return xAbove == x && yAbove == y + 1 && zAbove == z;
         });
 
         return cubeAbove && !cubeAbove.disabled && !cubeAbove.dragging;
