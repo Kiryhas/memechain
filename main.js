@@ -60,6 +60,7 @@ class CubeManager {
         this.popHistoryHandler = this.popHistory.bind(this);
         this.shareHandler = this.share.bind(this);
 
+
         this.draggedCube = null;
         this.hoveringOverCube = null;
         this.scoreBoard = null;
@@ -91,7 +92,6 @@ class CubeManager {
         }
     }
 
-
     addControls() {
         const [back, seed, reset, share] = ['back', 'seed', 'reset', 'share'].map(btn => document.querySelector(`.controls-${btn}`));
 
@@ -116,29 +116,9 @@ class CubeManager {
         }
         if (this.hasLost) this.hasLost = false;
         this.history = [];
-        [this.cubes, this.seed] = this.generateCubes(seed);
-        this.initPositions();
+        this.shuffler = new BasicShuffler(this.seed);
+        [this.cubes, this.seed] = this.shuffler.generateNewGame(seed);
         this.scoreBoard = new ScoreBoard(this.seed);
-    }
-
-    generateCubes(seed) {
-        const cubes = [0, 1, 2, 3].flatMap(group => (
-            [32, 32, 16, 8, 8, 8, 4, 4, 4, 4, 2, 2, 2, 2].map(value => new Cube(0, 0, 0, value, group))
-        ));
-        return shuffle(cubes, seed);
-    }
-
-    initPositions() {
-        let cubeIndex = 0;
-        for (let y = 0; y < 6; y++) {
-            for (let x = 0; x < 6 - y; x++) {
-                for (let z = 0; z < 6 - x - y; z++) {
-                    this.cubes[cubeIndex].coordinates = [x, y, z];
-                    this.cubes[cubeIndex].resetPosition();
-                    cubeIndex++;
-                }
-            }
-        }
     }
 
     cubeInPosition(x, y) {
@@ -485,6 +465,67 @@ class ScoreBoard {
     }
 }
 
+class BasicShuffler {
+    constructor(seed, numberOfColors = 4, values = [32, 32, 16, 8, 8, 8, 4, 4, 4, 4, 2, 2, 2, 2]) {
+        this.seed = this.isValidSeed(seed) ? seed : this.getRandomSeed();
+        this.numberOfColors = numberOfColors;
+        this.values = values;
+    }
+
+    isValidSeed(seed) {
+        return (((+seed).toString().length == 7) && /\d{7}/.test(seed));
+    }
+
+    getRandomSeed() {
+        return Number(String(Math.floor(Math.random() * 10e6)).padStart(7, '1'));
+    }
+
+    generateCubes() {
+        this.cubes = [...Array(this.numberOfColors).keys()].flatMap(group => (
+            this.values.map(value => new Cube(0, 0, 0, value, group))
+        ));
+    }
+
+    shuffleCubes() {
+        const shuffledArray = [...this.cubes];
+        let currentIndex = shuffledArray.length, seedOffset = 0, temporaryValue, randomIndex;
+        const random = () => {
+            const x = Math.sin(this.seed + seedOffset) * 10000;
+            seedOffset++;
+            return x - Math.floor(x);
+        }
+        while (currentIndex) {
+            randomIndex = Math.floor(random() * currentIndex);
+            currentIndex--;
+            temporaryValue = shuffledArray[currentIndex];
+            shuffledArray[currentIndex] = shuffledArray[randomIndex];
+            shuffledArray[randomIndex] = temporaryValue;
+        }
+        this.cubes = shuffledArray;
+    }
+
+    initPositions() {
+        let cubeIndex = 0;
+        for (let y = 0; y < 6; y++) {
+            for (let x = 0; x < 6 - y; x++) {
+                for (let z = 0; z < 6 - x - y; z++) {
+                    this.cubes[cubeIndex].coordinates = [x, y, z];
+                    this.cubes[cubeIndex].resetPosition();
+                    cubeIndex++;
+                }
+            }
+        }
+    }
+
+    generateNewGame() {
+        this.generateCubes();
+        this.shuffleCubes();
+        this.initPositions();
+
+        return [this.cubes, this.seed];
+    }
+}
+
 const game = new Game();
 
 function resolveEventPositionOnCanvas(e) {
@@ -503,10 +544,6 @@ function resolveEventPositionOnCanvas(e) {
     return [x, y];
 }
 
-function isValidSeed(seed) {
-    return (((+seed).toString().length == 7) && /\d{7}/.test(seed));
-}
-
 function scaleCubeSizes(scale = 1) {
     scale *= 10;
     const width = 5 * scale;
@@ -514,24 +551,6 @@ function scaleCubeSizes(scale = 1) {
     const fontSize = `${1.1 * scale}px`;
 
     return [width, height, fontSize];
-}
-
-function shuffle(array, seed = +String(Math.floor(Math.random() * 10e6)).padStart(7, '1')) {
-    const shuffledArray = [...array];
-    let currentIndex = shuffledArray.length, seedOffset = 0, temporaryValue, randomIndex;
-    const random = () => {
-        const x = Math.sin(seed + seedOffset) * 10000;
-        seedOffset++;
-        return x - Math.floor(x);
-    }
-    while (currentIndex) {
-        randomIndex = Math.floor(random() * currentIndex);
-        currentIndex--;
-        temporaryValue = shuffledArray[currentIndex];
-        shuffledArray[currentIndex] = shuffledArray[randomIndex];
-        shuffledArray[randomIndex] = temporaryValue;
-    }
-    return [shuffledArray, seed];
 }
 
 function on(events, target, handler) {
