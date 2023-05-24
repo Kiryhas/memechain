@@ -130,14 +130,11 @@ class CubeManager {
 
     initPositions() {
         let cubeIndex = 0;
-        const calculateX = (x, z) => (WIDTH_CENTER) + (x * CUBE_WIDTH / 2) - (z * CUBE_WIDTH / 2);
-        const calculateY = (x, y, z) => (HEIGHT_CENTER + CUBE_HEIGHT / 2) - y * CUBE_HEIGHT + (z + x) * CUBE_HEIGHT / 2;
         for (let y = 0; y < 6; y++) {
             for (let x = 0; x < 6 - y; x++) {
                 for (let z = 0; z < 6 - x - y; z++) {
-                    this.cubes[cubeIndex].updatePosition(calculateX(x, z), calculateY(x, y, z));
                     this.cubes[cubeIndex].coordinates = [x, y, z];
-                    this.cubes[cubeIndex].index = cubeIndex;
+                    this.cubes[cubeIndex].resetPosition();
                     cubeIndex++;
                 }
             }
@@ -172,14 +169,13 @@ class CubeManager {
     dragCube(cubeIndex) {
         this.draggedCube = this.cubes[cubeIndex];
         this.draggedCube.dragging = true;
-        this.draggedCube.savePosition();
     }
 
     releaseCube() {
         if (this.draggedCube) {
             this.draggedCube.dragging = false;
             this.draggedCube.setComplement();
-            this.draggedCube.restorePosition();
+            this.draggedCube.resetPosition();
             this.draggedCube.opacity = 1;
             this.draggedCube.stroke = false;
             delete this.draggedCube;
@@ -348,11 +344,9 @@ class Cube {
         this.opacity = 1;
     }
 
-    savePosition() {
-        const { x, y } = this;
-        this.restorePosition = () => {
-            this.updatePosition(x, y);
-        }
+    resetPosition() {
+        const [x, y, z] = this.coordinates;
+        this.updatePosition(Cube.calculateRenderX(x, z), Cube.calculateRenderY(x, y, z));
     }
 
     setComplement(x = 0, y = 0) {
@@ -457,6 +451,13 @@ class Cube {
         backdrop.closePath();
 
         return [top, left, right, backdrop];
+    }
+
+    static calculateRenderX(x, z) {
+        return (WIDTH_CENTER) + (x * CUBE_WIDTH / 2) - (z * CUBE_WIDTH / 2);
+    }
+    static calculateRenderY(x, y, z) {
+        return (HEIGHT_CENTER + CUBE_HEIGHT / 2) - y * CUBE_HEIGHT + (z + x) * CUBE_HEIGHT / 2;
     }
 }
 
