@@ -330,7 +330,6 @@ class Cube {
     updatePosition(x, y, z) {
         this.x = x - this.xComplement;
         this.y = y - this.yComplement;
-        if (z) this.z = z;
         this.paths = Cube.cubePaths(x - this.xComplement, y - this.yComplement);
     }
 
@@ -589,8 +588,17 @@ class ControlManager {
         if (position == null) console.log('null');
         if (this.draggingInProgress) {
             this.dragEnd = [...position];
+
+            this.cubeManager.cubes[this.activeCubeIndex].updatePosition(...position);
         }
         if (!this.draggingInProgress) {
+            const [x, y] = position;
+            const draggedCube = this.cubeManager.cubes[this.activeCubeIndex];
+
+            const startX = draggedCube.x;
+            const startY = draggedCube.y;
+            draggedCube.setComplement(x - startX, y - startY);
+
             this.draggingInProgress = true;
         }
     }
@@ -599,9 +607,10 @@ class ControlManager {
         const [x, y] = this.resolveEventPositionOnCanvas(e);
         const cubeIndex = this.cubeManager.cubeInPosition(x, y, this.activeCubeIndex);
 
-
         if (this.draggingInProgress && this.dragDistance > 10) {
             this.cubeManager.combineCubes(this.activeCubeIndex, cubeIndex);
+            const activeCube = this.cubeManager.cubes[this.activeCubeIndex];
+            activeCube.resetPosition();
             this.resetActiveCubeIndex();
         }
         if (!this.draggingInProgress || (this.draggingInProgress && this.dragDistance <= 10)) {
