@@ -49,7 +49,7 @@ class Game {
         this.addControls();
 
         this.loop();
-        gameView.on('visibilitychange', document, _ => {
+        controlManager.on('visibilitychange', document, _ => {
             this.loop(document.hidden);
         });
     }
@@ -87,7 +87,7 @@ class Game {
         ['back', 'reset', 'seed', 'share'].map(name => {
             const element = document.querySelector(`.controls-${name}`);
             const handler = this[`${name}Handler`];
-            this.gameView.on('click', element, handler);
+            this.controlManager.on('click', element, handler);
         });
     }
 
@@ -661,18 +661,6 @@ class GameView {
         if (this.rotation == 360) this.rotation = 0;
         this.drawCube(cube);
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-    }
-
-    on(events, target, handler) {
-        for (const event of events.split(' ')) {
-            target.addEventListener(event, handler);
-        }
-    }
-
-    off(events, target, handler) {
-        for (const event of events.split(' ')) {
-            target.removeEventListener(event, handler);
-        }
     }
 }
 
