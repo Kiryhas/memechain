@@ -27,6 +27,7 @@ const CUBE_COLORS = [
 class Game {
     constructor() {
         this.cubeManager = new CubeManager();
+        this.controlManager = new ControlManager(this.cubeManager);
         this.renderHandler = this.render.bind(this);
 
         this.loop();
@@ -52,23 +53,17 @@ class CubeManager {
     constructor() {
         this.history = [];
 
-        this.movementStartHandler = this.movementStart.bind(this);
-        this.movementEndHandler = this.movementEnd.bind(this);
-        this.draggingCubeHandler = this.draggingCube.bind(this);
         this.newFieldInitHandler = this.newFieldInit.bind(this);
         this.newFieldInitWithSeedHandler = this.newFieldInitWithSeed.bind(this);
         this.popHistoryHandler = this.popHistory.bind(this);
         this.shareHandler = this.share.bind(this);
 
-
-        this.draggedCube = null;
         this.hoveringOverCube = null;
         this.scoreBoard = null;
         this.hasWon = false;
         this.hasLost = false;
 
         this.newFieldInit(this.resolveSeedOnInit());
-        this.listenToCubeEvents();
         this.addControls();
     }
 
@@ -76,7 +71,7 @@ class CubeManager {
         let seed = new URL(location.href).searchParams.get('s') ?? void 0;
         if (seed) {
             history.replaceState({}, '', location.pathname);
-            if (!isValidSeed(seed)) seed = void 0;
+            if (!BasicShuffler.isValidSeed(seed)) seed = void 0;
         }
 
         return seed;
@@ -104,7 +99,7 @@ class CubeManager {
     newFieldInitWithSeed() {
         const seed = prompt('Enter seed');
         if (seed) {
-            if (isValidSeed(seed)) this.newFieldInit(+seed);
+            if (BasicShuffler.isValidSeed(seed)) this.newFieldInit(+seed);
             else return alert('Seed must be a 7-digit number');
         }
     }
@@ -112,20 +107,23 @@ class CubeManager {
     newFieldInit(seed) {
         if (this.hasWon) {
             this.hasWon = false;
-            this.listenToCubeEvents();
         }
         if (this.hasLost) this.hasLost = false;
         this.history = [];
-        this.shuffler = new BasicShuffler(this.seed);
+        this.shuffler = new BasicShuffler(seed);
         [this.cubes, this.seed] = this.shuffler.generateNewGame(seed);
         this.scoreBoard = new ScoreBoard(this.seed);
     }
 
-    cubeInPosition(x, y) {
-        const [cubeInPosition] = this.cubes
-            .filter(cube => !cube.dragging && !cube.disabled && Cube.isInPath(cube, x, y))
+    cubeInPosition(x, y, ignoreIndex) {
+        const possibleCubes = this.cubes
+            .filter((_, index) => index != ignoreIndex)
+            .filter(cube => !cube.dragging && !cube.disabled)
+            .filter(cube => Cube.isInPath(cube, x, y))
             .sort(({ coordinates: [xA, yA, zA] }, { coordinates: [xB, yB, zB] }) => xB + yB + zB - xA - yA - zA);
-        return this.cubes.indexOf(cubeInPosition);
+
+        console.log(possibleCubes);
+        return this.cubes.indexOf(possibleCubes[0]);
     }
 
     cubeIsCovered(cube) {
@@ -146,52 +144,58 @@ class CubeManager {
         }
     }
 
-    dragCube(cubeIndex) {
-        this.draggedCube = this.cubes[cubeIndex];
-        this.draggedCube.dragging = true;
-    }
-
-    releaseCube() {
-        if (this.draggedCube) {
-            this.draggedCube.dragging = false;
-            this.draggedCube.setComplement();
-            this.draggedCube.resetPosition();
-            this.draggedCube.opacity = 1;
-            this.draggedCube.stroke = false;
-            delete this.draggedCube;
+    combineCubes(aIndex, bIndex) {
+        if (this.canCombine(aIndex, bIndex)) {
+            const [cubeA, cubeB] = [this.cubes[aIndex], this.cubes[bIndex]];
+            Cube.addCubes(cubeA, cubeB);
+            this.history.push([aIndex, bIndex]);
+            this.scoreBoard.addScore(cubeA.value);
+            return true;
         }
-    }
-    movementStart(e) {
-        if (e.target != canvas || this.draggedCube) return;
-        const [x, y] = resolveEventPositionOnCanvas(e);
-        const cubeInPositionIndex = this.cubeInPosition(x, y);
-
-        if (cubeInPositionIndex >= 0 && !this.cubeIsCovered(this.cubes[cubeInPositionIndex])) {
-            this.dragCube(cubeInPositionIndex);
-            const { x: startX, y: startY } = this.draggedCube;
-            this.draggedCube.setComplement(x - startX, y - startY);
-            on('touchmove mousemove', canvas, this.draggingCubeHandler);
-        }
+        return false;
     }
 
-    movementEnd(e) {
-        const [x, y] = resolveEventPositionOnCanvas(e);
-        if (this.draggedCube) {
-            const cubeInPositionIndex = this.cubeInPosition(x, y);
-            if (cubeInPositionIndex >= 0 && !this.cubeIsCovered(this.cubes[cubeInPositionIndex]) && Cube.canBeCombined(this.draggedCube, this.cubes[cubeInPositionIndex])) {
-                Cube.addCubes(this.draggedCube, this.cubes[cubeInPositionIndex]);
-                this.history.push([this.cubes.indexOf(this.draggedCube), cubeInPositionIndex]);
-                this.scoreBoard.addScore(this.draggedCube.value);
-            }
-            this.releaseCube();
-        }
+    canCombine(aIndex, bIndex) {
+        if (aIndex == -1 || bIndex == -1 || aIndex == bIndex) return false;
 
-        if (this.hoveringOverCube) this.hoveringOverCube.stroke = false;
+        const [cubeA, cubeB] = [this.cubes[aIndex], this.cubes[bIndex]];
+        const { coordinates: [xA, yA, zA] } = cubeA;
+        const { coordinates: [xB, yB, zB] } = cubeB;
 
-        off('touchmove mousemove', canvas, this.draggingCubeHandler);
-
-        this.updateGameStatus();
+        return Cube.canBeCombined(cubeA, cubeB);
     }
+
+    // movementStart(e) {
+    //     if (e.target != canvas || this.draggedCube) return;
+    //     const [x, y] = resolveEventPositionOnCanvas(e);
+    //     const cubeInPositionIndex = this.cubeInPosition(x, y);
+
+    //     if (cubeInPositionIndex >= 0 && !this.cubeIsCovered(this.cubes[cubeInPositionIndex])) {
+    //         this.dragCube(cubeInPositionIndex);
+    //         const { x: startX, y: startY } = this.draggedCube;
+    //         this.draggedCube.setComplement(x - startX, y - startY);
+    //         on('touchmove mousemove', canvas, this.draggingCubeHandler);
+    //     }
+    // }
+
+    // movementEnd(e) {
+    //     const [x, y] = resolveEventPositionOnCanvas(e);
+    //     if (this.draggedCube) {
+    //         const cubeInPositionIndex = this.cubeInPosition(x, y);
+    //         if (cubeInPositionIndex >= 0 && !this.cubeIsCovered(this.cubes[cubeInPositionIndex]) && Cube.canBeCombined(this.draggedCube, this.cubes[cubeInPositionIndex])) {
+    //             Cube.addCubes(this.draggedCube, this.cubes[cubeInPositionIndex]);
+    //             this.history.push([this.cubes.indexOf(this.draggedCube), cubeInPositionIndex]);
+    //             this.scoreBoard.addScore(this.draggedCube.value);
+    //         }
+    //         this.releaseCube();
+    //     }
+
+    //     if (this.hoveringOverCube) this.hoveringOverCube.stroke = false;
+
+    //     off('touchmove mousemove', canvas, this.draggingCubeHandler);
+
+    //     this.updateGameStatus();
+    // }
 
     updateGameStatus() {
         if (this.winCondition()) {
@@ -203,37 +207,28 @@ class CubeManager {
         }
     }
 
-    draggingCube(e) {
-        const [x, y] = resolveEventPositionOnCanvas(e);
+    // draggingCube(e) {
+    //     const [x, y] = resolveEventPositionOnCanvas(e);
 
-        if (this.draggedCube) {
+    //     if (this.draggedCube) {
 
-            if (this.hoveringOverCube) this.hoveringOverCube.stroke = false;
+    //         if (this.hoveringOverCube) this.hoveringOverCube.stroke = false;
 
-            this.draggedCube.updatePosition(x, y);
-            const cubeInPositionIndex = this.cubeInPosition(x, y);
-            const cubeInPosition = this.cubes[cubeInPositionIndex];
-            if (cubeInPositionIndex >= 0 && Cube.canBeCombined(this.draggedCube, cubeInPosition) && !this.cubeIsCovered(cubeInPosition)) {
-                this.hoveringOverCube = cubeInPosition;
-                cubeInPosition.stroke = true;
-                this.draggedCube.opacity = 0.5;
-                this.draggedCube.stroke = true;
-            } else {
-                this.draggedCube.stroke = false;
-                this.draggedCube.opacity = 1;
-            }
-        }
-    }
+    //         this.draggedCube.updatePosition(x, y);
+    //         const cubeInPositionIndex = this.cubeInPosition(x, y);
+    //         const cubeInPosition = this.cubes[cubeInPositionIndex];
+    //         if (cubeInPositionIndex >= 0 && Cube.canBeCombined(this.draggedCube, cubeInPosition) && !this.cubeIsCovered(cubeInPosition)) {
+    //             this.hoveringOverCube = cubeInPosition;
+    //             cubeInPosition.stroke = true;
+    //             this.draggedCube.opacity = 0.5;
+    //             this.draggedCube.stroke = true;
+    //         } else {
+    //             this.draggedCube.stroke = false;
+    //             this.draggedCube.opacity = 1;
+    //         }
+    //     }
+    // }
 
-    listenToCubeEvents() {
-        on('touchstart mousedown', canvas, this.movementStartHandler);
-        on('touchend mouseup', document, this.movementEndHandler);
-    }
-
-    stopListeningToCubeEvents() {
-        off('touchstart mousedown', canvas, this.movementStartHandler);
-        off('touchend mouseup', document, this.movementEndHandler);
-    }
 
     winCondition() {
         return this.cubes.filter(cube => !cube.disabled && cube.value == 128).length == 4;
@@ -326,6 +321,7 @@ class Cube {
 
     resetPosition() {
         const [x, y, z] = this.coordinates;
+        this.setComplement();
         this.updatePosition(Cube.calculateRenderX(x, z), Cube.calculateRenderY(x, y, z));
     }
 
@@ -467,12 +463,13 @@ class ScoreBoard {
 
 class BasicShuffler {
     constructor(seed, numberOfColors = 4, values = [32, 32, 16, 8, 8, 8, 4, 4, 4, 4, 2, 2, 2, 2]) {
-        this.seed = this.isValidSeed(seed) ? seed : this.getRandomSeed();
+        this.seed = BasicShuffler.isValidSeed(seed) ? seed : this.getRandomSeed();
         this.numberOfColors = numberOfColors;
         this.values = values;
+        console.log(this.seed);
     }
 
-    isValidSeed(seed) {
+    static isValidSeed(seed) {
         return (((+seed).toString().length == 7) && /\d{7}/.test(seed));
     }
 
@@ -525,6 +522,135 @@ class BasicShuffler {
         return [this.cubes, this.seed];
     }
 }
+
+class ControlManager {
+    constructor(cubeManager) {
+        this.cubeManager = cubeManager;
+        this.init();
+    }
+
+    init() {
+        this.interactionStartHandler = this.interactionStart.bind(this);
+        this.draggingHandler = this.dragging.bind(this);
+        this.interactionEndHandler = this.interactionEnd.bind(this);
+
+        this.changedActiveCube = false;
+        this.draggingInProgress = false;
+
+        this.dragStart = null;
+        this.dragEnd = null;
+
+        this.activeCubeIndex = -1;
+
+        this.on('touchstart mousedown', canvas, this.interactionStartHandler);
+        this.on('touchend mouseup', document, this.interactionEndHandler);
+        this.on('focusout', window, this.interactionEndHandler);
+    }
+
+    setActiveCubeIndex(index) {
+        this.resetActiveCubeIndex();
+        const cube = this.cubeManager.cubes[index];
+        if (cube) {
+            cube.opacity = 0.5;
+            this.activeCubeIndex = index;
+
+            this.changedActiveCube = true;
+        }
+    }
+
+    resetActiveCubeIndex() {
+        if (this.activeCubeIndex != -1) {
+            const cube = this.cubeManager.cubes[this.activeCubeIndex];
+            cube.opacity = 1;
+            this.activeCubeIndex = -1;
+        }
+    }
+
+    combineCubes(indexA, indexB) {
+        return this.cubeManager.combineCubes(indexA, indexB);
+    }
+
+    interactionStart(e) {
+        if (e.target != canvas) return;
+
+        this.changedActiveCube = false;
+        this.on('touchmove mousemove', canvas, this.draggingHandler);
+        const [x, y] = this.resolveEventPositionOnCanvas(e);
+
+        this.dragStart = [x, y];
+
+        if (this.activeCubeIndex == -1) {
+            this.setActiveCubeIndex(this.cubeManager.cubeInPosition(x, y));
+        }
+    }
+
+    dragging(e) {
+        const position = this.resolveEventPositionOnCanvas(e);
+        if (position == null) console.log('null');
+        if (this.draggingInProgress) {
+            this.dragEnd = [...position];
+        }
+        if (!this.draggingInProgress) {
+            this.draggingInProgress = true;
+        }
+    }
+
+    interactionEnd(e) {
+        const [x, y] = this.resolveEventPositionOnCanvas(e);
+        const cubeIndex = this.cubeManager.cubeInPosition(x, y, this.activeCubeIndex);
+
+
+        if (this.draggingInProgress && this.getDragDistance() > 10) {
+            this.combineCubes(this.activeCubeIndex, cubeIndex);
+            this.resetActiveCubeIndex();
+        }
+        if (!this.draggingInProgress || (this.draggingInProgress && this.getDragDistance() <= 10)) {
+            if (!this.changedActiveCube) {
+                this.combineCubes(this.activeCubeIndex, cubeIndex);
+                this.resetActiveCubeIndex();
+            }
+        }
+
+        this.draggingInProgress = false;
+        this.interactionInProgress = false;
+        this.off('touchmove mousemove', canvas, this.draggingHandler);
+    }
+
+    getDragDistance() {
+        if (!this.dragStart || !this.dragEnd) return 0;
+        const [x1, y1] = this.dragStart, [x2, y2] = this.dragEnd;
+        return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+    }
+
+    on(events, target, handler) {
+        for (const event of events.split(' ')) {
+            target.addEventListener(event, handler);
+        }
+    }
+
+    off(events, target, handler) {
+        for (const event of events.split(' ')) {
+            target.removeEventListener(event, handler);
+        }
+    }
+
+    resolveEventPositionOnCanvas(e) {
+        const isMobile = window.TouchEvent && e instanceof TouchEvent;
+        const boundingRect = canvas.getBoundingClientRect();
+        const { clientX, clientY } = e, { left, top } = boundingRect;
+        let x, y;
+
+        if (isMobile) {
+            const [{ clientX: touchX, clientY: touchY }] = e.touches.length ? e.touches : e.changedTouches;
+            x = touchX - left, y = touchY - top;
+        } else if (e.button == 0) {
+            x = clientX - left, y = clientY - top;
+        }
+
+        return [x, y];
+    }
+}
+
 
 const game = new Game();
 
