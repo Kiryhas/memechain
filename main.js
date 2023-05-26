@@ -56,14 +56,25 @@ class Game {
 
     render() {
         const { score, seed, hasWon, hasLost, cubes } = this.cubeManager;
-        const activeCubes = cubes.filter(cube => !cube.disabled);
+        const { activeCubeIndex, draggingInProgress } = this.controlManager;
+        const remainingCubes = cubes.filter(cube => !cube.disabled);
 
         this.loopID = requestAnimationFrame(this.renderHandler);
 
         this.gameView.clear();
         this.gameView.drawScoreBoard(score, seed);
-        if (!hasWon && !hasLost) this.gameView.drawCubes(activeCubes);
-        if (hasWon) this.gameView.drawWinScreen(activeCubes);
+        if (!hasWon && !hasLost) {
+            const activeCube = cubes[activeCubeIndex];
+            const nonActiveCubes = remainingCubes.filter(cube => cube != activeCube);
+
+            if (draggingInProgress) {
+                this.gameView.drawCubes(nonActiveCubes);
+                if (activeCube) this.gameView.drawCube(activeCube);
+            } else {
+                this.gameView.drawCubes(remainingCubes);
+            }
+        }
+        if (hasWon) this.gameView.drawWinScreen(remainingCubes);
         // if (hasLost) this.gameView.drawLoseScreen(cubes);
     }
 
@@ -501,24 +512,25 @@ class ControlManager {
 
     dragging(e) {
         const position = this.resolveEventPositionOnCanvas(e);
-        this.cubeManager.cubes[this.activeCubeIndex].stroke = false;
+        const activeCube = this.cubeManager.cubes[this.activeCubeIndex];
+        if (activeCube) activeCube.stroke = false;
+
         if (this.draggingInProgress) {
             this.dragEnd = [...position];
 
-            this.cubeManager.cubes[this.activeCubeIndex].updatePosition(...position);
+            activeCube.updatePosition(...position);
 
             const cubeBelow = this.cubeManager.cubeInPosition(...position, this.activeCubeIndex);
             if (this.cubeManager.canCombine(this.activeCubeIndex, cubeBelow)) {
-                this.cubeManager.cubes[this.activeCubeIndex].stroke = true;
+                activeCube.stroke = true;
             }
         }
         if (!this.draggingInProgress) {
             const [x, y] = position;
-            const draggedCube = this.cubeManager.cubes[this.activeCubeIndex];
 
-            const startX = draggedCube.x;
-            const startY = draggedCube.y;
-            draggedCube.setComplement(x - startX, y - startY);
+            if (activeCube) {
+                activeCube.setComplement(x - activeCube.x, y - activeCube.y);
+            }
 
             this.draggingInProgress = true;
         }
@@ -527,11 +539,10 @@ class ControlManager {
     interactionEnd(e) {
         const [x, y] = this.resolveEventPositionOnCanvas(e);
         const cubeIndex = this.cubeManager.cubeInPosition(x, y, this.activeCubeIndex);
+        const activeCube = this.cubeManager.cubes[this.activeCubeIndex];
 
         if (this.draggingInProgress && this.dragDistance > 10) {
             this.cubeManager.combineCubes(this.activeCubeIndex, cubeIndex);
-            const activeCube = this.cubeManager.cubes[this.activeCubeIndex];
-            activeCube.resetPosition();
             this.resetActiveCubeIndex();
         }
         if (!this.draggingInProgress || (this.draggingInProgress && this.dragDistance <= 10)) {
@@ -541,6 +552,10 @@ class ControlManager {
             }
         }
 
+        if (activeCube) {
+            activeCube.stroke = false;
+            activeCube.resetPosition();
+        }
         this.draggingInProgress = false;
         this.interactionInProgress = false;
         this.off('touchmove mousemove', canvas, this.draggingHandler);
@@ -609,7 +624,7 @@ class GameView {
         }
     }
 
-    drawCube({ x, y, paths, color, value, stroke = true, opacity = 1 }) {
+    drawCube({ x, y, paths, color, value, stroke, opacity = 1 }) {
         const [top, left, right, backdrop] = paths;
         const [topColor, leftColor, rightColor] = CUBE_COLORS[color];
 
