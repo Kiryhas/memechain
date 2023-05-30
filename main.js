@@ -56,7 +56,7 @@ class Game {
 
     render() {
         const { score, seed, hasWon, hasLost, cubes } = this.cubeManager;
-        const { activeCubeIndex, draggingInProgress } = this.controlManager;
+        const { selectedCubeIndex, draggingInProgress } = this.controlManager;
         const remainingCubes = cubes.filter(cube => !cube.disabled);
 
         this.loopID = requestAnimationFrame(this.renderHandler);
@@ -64,7 +64,7 @@ class Game {
         this.gameView.clear();
         this.gameView.drawScoreBoard(score, seed);
         if (!hasWon && !hasLost) {
-            const activeCube = cubes[activeCubeIndex];
+            const activeCube = cubes[selectedCubeIndex];
             const nonActiveCubes = remainingCubes.filter(cube => cube != activeCube);
 
             if (draggingInProgress) {
@@ -447,23 +447,21 @@ class BasicShuffler {
 }
 
 class ControlManager {
+
     constructor(cubeManager) {
         this.cubeManager = cubeManager;
         this.init();
     }
 
     init() {
-        this.interactionStartHandler = this.interactionStart.bind(this);
-        this.draggingHandler = this.dragging.bind(this);
-        this.interactionEndHandler = this.interactionEnd.bind(this);
+        this.selectedCubeIndex = -1;
+        this.hoverOverCubeIndex = -1;
 
-        this.changedActiveCube = false;
+        this.selectedCubeChanged = false;
         this.draggingInProgress = false;
 
         this.dragStart = null;
         this.dragEnd = null;
-
-        this.activeCubeIndex = -1;
 
         this.on('touchstart mousedown', canvas, this.interactionStartHandler);
         this.on('touchend mouseup', document, this.interactionEndHandler);
@@ -481,47 +479,56 @@ class ControlManager {
         const cube = this.cubeManager.cubes[index];
         if (cube) {
             cube.opacity = 0.5;
-            this.activeCubeIndex = index;
+            this.selectedCubeIndex = index;
 
-            this.changedActiveCube = true;
+            this.selectedCubeChanged = true;
         }
     }
 
     resetActiveCubeIndex() {
-        if (this.activeCubeIndex != -1) {
-            const cube = this.cubeManager.cubes[this.activeCubeIndex];
+        if (this.selectedCubeIndex != -1) {
+            const cube = this.cubeManager.cubes[this.selectedCubeIndex];
             cube.opacity = 1;
-            this.activeCubeIndex = -1;
+            this.selectedCubeIndex = -1;
         }
     }
 
-    interactionStart(e) {
-        if (e.target != canvas) return;
+    interactionStartHandler = (event) => {
+        if (event.target != canvas) return;
 
-        this.changedActiveCube = false;
+        this.selectedCubeChanged = false;
         this.on('touchmove mousemove', canvas, this.draggingHandler);
-        const [x, y] = this.resolveEventPositionOnCanvas(e);
+        const [x, y] = this.resolveEventPositionOnCanvas(event);
 
         this.dragStart = [x, y];
 
-        if (this.activeCubeIndex == -1) {
+        if (this.selectedCubeIndex == -1) {
             this.setActiveCubeIndex(this.cubeManager.cubeInPosition(x, y));
         }
     }
 
-    dragging(e) {
-        const position = this.resolveEventPositionOnCanvas(e);
-        const activeCube = this.cubeManager.cubes[this.activeCubeIndex];
+    draggingHandler = (event) => {
+        const position = this.resolveEventPositionOnCanvas(event);
+        const activeCube = this.cubeManager.cubes[this.selectedCubeIndex];
+        const lastHoverOverCube = this.cubeManager.cubes[this.hoverOverCubeIndex];
         if (activeCube) activeCube.stroke = false;
+        if (lastHoverOverCube) {
+            this.hoverOverCubeIndex = -1;
+            lastHoverOverCube.stroke = false;
+        }
 
         if (this.draggingInProgress) {
             this.dragEnd = [...position];
 
             activeCube.updatePosition(...position);
 
-            const cubeBelow = this.cubeManager.cubeInPosition(...position, this.activeCubeIndex);
-            if (this.cubeManager.canCombine(this.activeCubeIndex, cubeBelow)) {
+            const hoverOverCubeIndex = this.cubeManager.cubeInPosition(...position, this.selectedCubeIndex);
+            const hoverOverCube = this.cubeManager.cubes[hoverOverCubeIndex];
+
+            if (hoverOverCube && this.cubeManager.canCombine(this.selectedCubeIndex, hoverOverCubeIndex)) {
                 activeCube.stroke = true;
+                hoverOverCube.stroke = true;
+                this.hoverOverCubeIndex = hoverOverCubeIndex;
             }
         }
         if (!this.draggingInProgress) {
@@ -535,18 +542,19 @@ class ControlManager {
         }
     }
 
-    interactionEnd(e) {
-        const [x, y] = this.resolveEventPositionOnCanvas(e);
-        const cubeIndex = this.cubeManager.cubeInPosition(x, y, this.activeCubeIndex);
-        const activeCube = this.cubeManager.cubes[this.activeCubeIndex];
+    interactionEndHandler = (event) => {
+        const [x, y] = this.resolveEventPositionOnCanvas(event);
+        const cubeIndex = this.cubeManager.cubeInPosition(x, y, this.selectedCubeIndex);
+        const activeCube = this.cubeManager.cubes[this.selectedCubeIndex];
+        const lastHoverOverCube = this.cubeManager.cubes[this.hoverOverCubeIndex];
 
         if (this.draggingInProgress && this.dragDistance > 10) {
-            this.cubeManager.combineCubes(this.activeCubeIndex, cubeIndex);
+            this.cubeManager.combineCubes(this.selectedCubeIndex, cubeIndex);
             this.resetActiveCubeIndex();
         }
         if (!this.draggingInProgress || (this.draggingInProgress && this.dragDistance <= 10)) {
-            if (!this.changedActiveCube) {
-                this.cubeManager.combineCubes(this.activeCubeIndex, cubeIndex);
+            if (!this.selectedCubeChanged) {
+                this.cubeManager.combineCubes(this.selectedCubeIndex, cubeIndex);
                 this.resetActiveCubeIndex();
             }
         }
@@ -555,9 +563,31 @@ class ControlManager {
             activeCube.stroke = false;
             activeCube.resetPosition();
         }
+
+        if (lastHoverOverCube) {
+            this.hoverOverCubeIndex = -1;
+            lastHoverOverCube.stroke = false;
+        }
+
         this.draggingInProgress = false;
         this.interactionInProgress = false;
         this.off('touchmove mousemove', canvas, this.draggingHandler);
+    }
+
+    resolveEventPositionOnCanvas(event) {
+        const isMobile = window.TouchEvent && event instanceof TouchEvent;
+        const boundingRect = canvas.getBoundingClientRect();
+        const { clientX, clientY } = event, { left, top } = boundingRect;
+        let x, y;
+
+        if (isMobile) {
+            const [{ clientX: touchX, clientY: touchY }] = event.touches.length ? event.touches : event.changedTouches;
+            x = touchX - left, y = touchY - top;
+        } else if (event.button == 0) {
+            x = clientX - left, y = clientY - top;
+        }
+
+        return [x, y];
     }
 
     on(events, target, handler) {
@@ -570,22 +600,6 @@ class ControlManager {
         for (const event of events.split(' ')) {
             target.removeEventListener(event, handler);
         }
-    }
-
-    resolveEventPositionOnCanvas(e) {
-        const isMobile = window.TouchEvent && e instanceof TouchEvent;
-        const boundingRect = canvas.getBoundingClientRect();
-        const { clientX, clientY } = e, { left, top } = boundingRect;
-        let x, y;
-
-        if (isMobile) {
-            const [{ clientX: touchX, clientY: touchY }] = e.touches.length ? e.touches : e.changedTouches;
-            x = touchX - left, y = touchY - top;
-        } else if (e.button == 0) {
-            x = clientX - left, y = clientY - top;
-        }
-
-        return [x, y];
     }
 }
 
