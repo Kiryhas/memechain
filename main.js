@@ -84,11 +84,26 @@ class Game {
     }
 
     addControls() {
-        ['back', 'reset', 'seed', 'share'].map(name => {
-            const element = document.querySelector(`.controls-${name}`);
-            const handler = this[`${name}Handler`];
+        const handlersMap = {
+            '.controls-back': () => {
+                this.cubeManager.popHistory();
+            },
+            '.controls-reset': () => {
+                this.cubeManager.startNewGame();
+            },
+            '.controls-seed': () => {
+                this.manualSeed();
+            },
+            '.controls-share': () => {
+                this.share();
+            }
+        }
+
+        for (let selector in handlersMap) {
+            const element = document.querySelector(selector);
+            const handler = handlersMap[selector];
             this.controlManager.on('click', element, handler);
-        });
+        }
     }
 
     share() {
@@ -118,22 +133,6 @@ class Game {
             return this.cubeManager.startNewGame(seed);
         }
         return alert('Seed must be a 7-digit number');
-    }
-
-    backHandler = () => {
-        this.cubeManager.popHistory();
-    }
-
-    resetHandler = () => {
-        this.cubeManager.startNewGame();
-    }
-
-    seedHandler = () => {
-        this.manualSeed();
-    }
-
-    shareHandler = () => {
-        this.share();
     }
 
     renderHandler = () => {
