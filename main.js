@@ -89,7 +89,7 @@ class Game {
             '.controls-back': () => {
                 this.gameView.reset();
                 this.controlManager.reset();
-                this.cubeManager.popHistory();
+                this.cubeManager.historyPop();
             },
             '.controls-reset': () => {
                 this.gameView.reset();
@@ -189,20 +189,11 @@ class CubeManager {
         return this.cubes[index];
     }
 
-    popHistory() {
-        if (this.history.length && !this.hasWon) {
-            const [toAdd, addedTo] = this.history.pop();
-            Cube.revertAddition(this.getCube(toAdd), this.getCube(addedTo));
-            this.subtractScore(this.cubes[toAdd].value);
-            if (this.hasLost) this.hasLost = false;
-        }
-    }
-
     combineCubes(toAddIndex, toBeAddedToIndex) {
         if (this.canCombine(toAddIndex, toBeAddedToIndex)) {
             const [toAdd, toBeAddedTo] = [this.getCube(toAddIndex), this.getCube(toBeAddedToIndex)];
             Cube.addCubes(toAdd, toBeAddedTo);
-            this.history.push([toAddIndex, toBeAddedToIndex]);
+            this.historyPush(toAddIndex, toBeAddedToIndex);
             this.addScore(toAdd.value);
             return true;
         }
@@ -212,8 +203,8 @@ class CubeManager {
     updateGameStatus() {
         if (this.winCondition()) {
             this.hasWon = true;
-            this.stopListeningToCubeEvents();
-        } else if (!this.hasLost && !this.thereArePossibleCombinations()) {
+            // this.stopListeningToCubeEvents();
+        } else if (!this.hasLost && !this.areMovesAvailable()) {
             alert(`Game Over \nScore: ${this.score}`);
             this.hasLost = true;
         }
@@ -229,6 +220,21 @@ class CubeManager {
 
     subtractScore(n) {
         this.score -= n * 10;
+    }
+
+    historyPush(toAddIndex, toBeAddedToIndex) {
+        this.history.push([toAddIndex, toBeAddedToIndex]);
+        this.updateGameStatus();
+    }
+
+    historyPop() {
+        if (this.history.length && !this.hasWon) {
+            const [toAdd, addedTo] = this.history.pop();
+            Cube.revertAddition(this.getCube(toAdd), this.getCube(addedTo));
+            this.subtractScore(this.cubes[toAdd].value);
+            if (this.hasLost) this.hasLost = false;
+        }
+        this.updateGameStatus();
     }
 
     canCombine(toAddIndex, toBeAddedToIndex) {
