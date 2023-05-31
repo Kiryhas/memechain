@@ -55,12 +55,12 @@ class Game {
         });
     }
 
-    render() {
+    render = () => {
         const { score, seed, hasWon, hasLost, cubes } = this.cubeManager;
         const { selectedCubeIndex, draggingInProgress } = this.controlManager;
         const remainingCubes = cubes.filter(cube => !cube.disabled);
 
-        this.loopID = requestAnimationFrame(this.renderHandler);
+        this.loopID = requestAnimationFrame(this.render);
 
         this.gameView.clear();
         this.gameView.drawScoreBoard(score, seed);
@@ -81,7 +81,7 @@ class Game {
 
     loop(disable = false) {
         if (this.loopID) cancelAnimationFrame(this.loopID);
-        if (!disable) this.loopID = requestAnimationFrame(this.renderHandler);
+        if (!disable) this.loopID = requestAnimationFrame(this.render);
     }
 
     addControls() {
@@ -121,7 +121,7 @@ class Game {
     }
 
     queryStringSeed() {
-        let seed = new URL(location.href).searchParams.get('s') ?? void 0;
+        const seed = new URL(location.href).searchParams.get('s') ?? void 0;
         if (!seed) return;
 
         if (this.shuffler.isValidSeed(seed)) {
@@ -137,10 +137,6 @@ class Game {
             return this.cubeManager.startNewGame(seed);
         }
         return alert('Seed must be a 7-digit number');
-    }
-
-    renderHandler = () => {
-        this.render();
     }
 }
 
