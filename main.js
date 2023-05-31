@@ -233,13 +233,13 @@ class CubeManager {
 
     canCombine(toAddIndex, toBeAddedToIndex) {
         if (toAddIndex == -1 || toBeAddedToIndex == -1 || toAddIndex == toBeAddedToIndex) return false;
-        if (this.cubeIsCovered(toBeAddedToIndex, toAddIndex)) return false;
+        if (this.hasCubeAbove(toBeAddedToIndex, toAddIndex)) return false;
 
         const [toAdd, toBeAddedTo] = [this.getCube(toAddIndex), this.getCube(toBeAddedToIndex)];
         return Cube.canBeCombined(toAdd, toBeAddedTo);
     }
 
-    cubeIsCovered(index, ignoreIndex) {
+    hasCubeAbove(index, ignoreIndex) {
         const { coordinates: [x, y, z] } = this.getCube(index);
         const cubeAbove = this.cubes.find(Cube.positionMatcher(x, y + 1, z));
         const cubeAboveIndex = this.cubes.indexOf(cubeAbove);
