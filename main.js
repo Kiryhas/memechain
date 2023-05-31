@@ -143,6 +143,8 @@ class Game {
 }
 
 class CubeManager {
+    #cubes;
+
     constructor(shuffler) {
         this.shuffler = shuffler;
 
@@ -152,6 +154,14 @@ class CubeManager {
         this.score = 0;
 
         this.startNewGame();
+    }
+
+    get cubes() {
+        return this.#cubes;
+    }
+
+    set cubes(cubes) {
+        this.#cubes = cubes;
     }
 
     resetGame() {
@@ -179,15 +189,6 @@ class CubeManager {
         return this.cubes[index];
     }
 
-    cubeIsCovered(cube) {
-        const { coordinates: [x, y, z] } = cube;
-        const cubeAbove = this.cubes.find(({ coordinates: [xAbove, yAbove, zAbove] }) => {
-            return xAbove == x && yAbove == y + 1 && zAbove == z;
-        });
-
-        return cubeAbove && !cubeAbove.disabled && !cubeAbove.dragging;
-    }
-
     popHistory() {
         if (this.history.length && !this.hasWon) {
             const [toAdd, addedTo] = this.history.pop();
@@ -197,25 +198,15 @@ class CubeManager {
         }
     }
 
-    combineCubes(aIndex, bIndex) {
-        if (this.canCombine(aIndex, bIndex)) {
-            const [cubeA, cubeB] = [this.getCube(aIndex), this.getCube(bIndex)];
-            Cube.addCubes(cubeA, cubeB);
-            this.history.push([aIndex, bIndex]);
-            this.addScore(cubeA.value);
+    combineCubes(toAddIndex, toBeAddedToIndex) {
+        if (this.canCombine(toAddIndex, toBeAddedToIndex)) {
+            const [toAdd, toBeAddedTo] = [this.getCube(toAddIndex), this.getCube(toBeAddedToIndex)];
+            Cube.addCubes(toAdd, toBeAddedTo);
+            this.history.push([toAddIndex, toBeAddedToIndex]);
+            this.addScore(toAdd.value);
             return true;
         }
         return false;
-    }
-
-    canCombine(aIndex, bIndex) {
-        if (aIndex == -1 || bIndex == -1 || aIndex == bIndex) return false;
-
-        const [cubeA, cubeB] = [this.getCube(aIndex), this.getCube(bIndex)];
-        const { coordinates: [xA, yA, zA] } = cubeA;
-        const { coordinates: [xB, yB, zB] } = cubeB;
-
-        return Cube.canBeCombined(cubeA, cubeB);
     }
 
     updateGameStatus() {
@@ -230,6 +221,30 @@ class CubeManager {
 
     winCondition() {
         return this.cubes.filter(cube => !cube.disabled && cube.value == 128).length == 4;
+    }
+
+    addScore(n) {
+        this.score += n * 10;
+    }
+
+    subtractScore(n) {
+        this.score -= n * 10;
+    }
+
+    canCombine(toAddIndex, toBeAddedToIndex) {
+        if (toAddIndex == -1 || toBeAddedToIndex == -1 || toAddIndex == toBeAddedToIndex) return false;
+        if (this.cubeIsCovered(toBeAddedToIndex, toAddIndex)) return false;
+
+        const [toAdd, toBeAddedTo] = [this.getCube(toAddIndex), this.getCube(toBeAddedToIndex)];
+        return Cube.canBeCombined(toAdd, toBeAddedTo);
+    }
+
+    cubeIsCovered(index, ignoreIndex) {
+        const { coordinates: [x, y, z] } = this.getCube(index);
+        const cubeAbove = this.cubes.find(Cube.positionMatcher(x, y + 1, z));
+        const cubeAboveIndex = this.cubes.indexOf(cubeAbove);
+
+        return cubeAboveIndex != -1 && cubeAboveIndex != ignoreIndex && !cubeAbove.disabled;
     }
 
     coveringCubes(cube) {
@@ -282,14 +297,6 @@ class CubeManager {
             return !cubeInFront && Cube.canBeCombined(cubeBelow, cube);
         });
     }
-
-    addScore(n) {
-        this.score += n * 10;
-    }
-
-    subtractScore(n) {
-        this.score -= n * 10;
-    }
 }
 
 class Cube {
@@ -339,6 +346,10 @@ class Cube {
         this.x = x - this.xComplement;
         this.y = y - this.yComplement;
         this.paths = Cube.cubePaths(x - this.xComplement, y - this.yComplement);
+    }
+
+    static positionMatcher(x, y, z) {
+        return ({ coordinates: [cubeX, cubeY, cubeZ] }) => cubeX == x && cubeY == y && cubeZ == z;
     }
 
     static addCubes(toAdd, toBeAddedTo) {
