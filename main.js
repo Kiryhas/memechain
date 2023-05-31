@@ -3,6 +3,7 @@ const ctx = canvas.getContext('2d');
 const isMobile = matchMedia('(max-width: 768px)').matches;
 const INIT_HEIGHT = 600;
 const INIT_WIDTH = 800;
+const MIN_DRAG_DISTANCE = 10;
 let scale = 1.5;
 if (isMobile) {
     canvas.width = `${innerWidth - 10}`;
@@ -177,6 +178,10 @@ class CubeManager {
         return this.cubes.indexOf(cubeInPosition);
     }
 
+    getCube(index) {
+        return this.cubes[index];
+    }
+
     cubeIsCovered(cube) {
         const { coordinates: [x, y, z] } = cube;
         const cubeAbove = this.cubes.find(({ coordinates: [xAbove, yAbove, zAbove] }) => {
@@ -189,7 +194,7 @@ class CubeManager {
     popHistory() {
         if (this.history.length && !this.hasWon) {
             const [toAdd, addedTo] = this.history.pop();
-            Cube.revertAddition(this.cubes[toAdd], this.cubes[addedTo]);
+            Cube.revertAddition(this.getCube(toAdd), this.getCube(addedTo));
             this.subtractScore(this.cubes[toAdd].value);
             if (this.hasLost) this.hasLost = false;
         }
@@ -197,7 +202,7 @@ class CubeManager {
 
     combineCubes(aIndex, bIndex) {
         if (this.canCombine(aIndex, bIndex)) {
-            const [cubeA, cubeB] = [this.cubes[aIndex], this.cubes[bIndex]];
+            const [cubeA, cubeB] = [this.getCube(aIndex), this.getCube(bIndex)];
             Cube.addCubes(cubeA, cubeB);
             this.history.push([aIndex, bIndex]);
             this.addScore(cubeA.value);
@@ -209,7 +214,7 @@ class CubeManager {
     canCombine(aIndex, bIndex) {
         if (aIndex == -1 || bIndex == -1 || aIndex == bIndex) return false;
 
-        const [cubeA, cubeB] = [this.cubes[aIndex], this.cubes[bIndex]];
+        const [cubeA, cubeB] = [this.getCube(aIndex), this.getCube(bIndex)];
         const { coordinates: [xA, yA, zA] } = cubeA;
         const { coordinates: [xB, yB, zB] } = cubeB;
 
@@ -480,13 +485,14 @@ class ControlManager {
 
         this.selectedCubeChanged = false;
         this.draggingInProgress = false;
+        this.interactionWithSelectedCube = false;
 
         this.dragStart = null;
         this.dragEnd = null;
 
         this.on('touchstart mousedown', canvas, this.interactionStartHandler);
         this.on('touchend mouseup', document, this.interactionEndHandler);
-        this.on('focusout', window, this.interactionEndHandler);
+        this.on('blur', window, this.interactionEndHandler);
     }
 
     set selectedCubeIndex(index = -1) {
@@ -507,7 +513,7 @@ class ControlManager {
     }
 
     get selectedCube() {
-        return this.cubeManager.cubes[this.selectedCubeIndex];
+        return this.cubeManager.getCube(this.selectedCubeIndex);
     }
 
     set hoverOverCubeIndex(index = -1) {
@@ -520,7 +526,7 @@ class ControlManager {
     }
 
     get hoverOverCube() {
-        return this.cubeManager.cubes[this.hoverOverCubeIndex];
+        return this.cubeManager.getCube(this.hoverOverCubeIndex);
     }
 
     get dragDistance() {
@@ -535,11 +541,16 @@ class ControlManager {
         this.selectedCubeChanged = false;
         this.on('touchmove mousemove', canvas, this.draggingHandler);
         const [x, y] = this.resolveEventPositionOnCanvas(event);
+        const cubeIndex = this.cubeManager.cubeInPosition(x, y);
 
         this.dragStart = [x, y];
 
         if (!this.selectedCube) {
-            this.selectedCubeIndex = this.cubeManager.cubeInPosition(x, y);
+            this.selectedCubeIndex = cubeIndex;
+        }
+
+        if (this.selectedCubeIndex == cubeIndex) {
+            this.interactionWithSelectedCube = true;
         }
     }
 
@@ -548,6 +559,8 @@ class ControlManager {
 
         if (this.selectedCube) this.selectedCube.disableStroke();
         this.hoverOverCubeIndex = -1;
+
+        if (!this.selectedCube || !this.interactionWithSelectedCube) return;
 
         if (this.draggingInProgress) {
             this.dragEnd = [...position];
@@ -576,9 +589,9 @@ class ControlManager {
         const cubeIndex = this.cubeManager.cubeInPosition(x, y, this.selectedCubeIndex);
 
         const isDragging = this.draggingInProgress;
-        const isDraggingClose = isDragging && this.dragDistance <= 10;
+        const isDraggingClose = isDragging && this.dragDistance <= MIN_DRAG_DISTANCE;
         const isNotDraggingOrDraggingClose = (!isDragging || isDraggingClose) && !this.selectedCubeChanged;
-        const isDraggingFar = isDragging && this.dragDistance > 10;
+        const isDraggingFar = isDragging && this.dragDistance > MIN_DRAG_DISTANCE;
 
         if (isDraggingFar || isNotDraggingOrDraggingClose) {
             this.cubeManager.combineCubes(this.selectedCubeIndex, cubeIndex);
@@ -595,6 +608,7 @@ class ControlManager {
             this.hoverOverCubeIndex = -1;
         }
 
+        this.interactionWithSelectedCube = false;
         this.draggingInProgress = false;
         this.interactionInProgress = false;
         this.off('touchmove mousemove', canvas, this.draggingHandler);
