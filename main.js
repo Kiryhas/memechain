@@ -37,8 +37,8 @@ class Game {
     constructor() {
         const shuffler = new BasicShuffler();
         const cubeManager = new CubeManager(shuffler);
-        const controlManager = new ControlManager(cubeManager);
         const gameView = new GameView(ctx, canvasWidth, canvasHeight);
+        const controlManager = new ControlManager(cubeManager, gameView);
 
         this.shuffler = shuffler;
         this.cubeManager = cubeManager;
@@ -87,10 +87,12 @@ class Game {
     addControls() {
         const handlersMap = {
             '.controls-back': () => {
+                this.gameView.reset();
                 this.controlManager.reset();
                 this.cubeManager.popHistory();
             },
             '.controls-reset': () => {
+                this.gameView.reset();
                 this.controlManager.reset();
                 this.cubeManager.startNewGame();
             },
@@ -165,12 +167,11 @@ class CubeManager {
         [this.cubes, this.seed] = this.shuffler.generateNewGame(seed);
     }
 
-    cubeInPosition(x, y, ignoreIndex) {
-        const [cubeInPosition] = this.cubes
-            .filter((_, index) => index != ignoreIndex)
-            .filter(cube => !cube.dragging && !cube.disabled)
-            .filter(cube => Cube.isInPath(cube, x, y))
+    closestCubeInPositionIndex(cubesInPosition) {
+        const [cubeInPosition] = cubesInPosition
+            .filter(cube => !cube.disabled)
             .sort(({ coordinates: [xA, yA, zA] }, { coordinates: [xB, yB, zB] }) => xB + yB + zB - xA - yA - zA);
+
         return this.cubes.indexOf(cubeInPosition);
     }
 
@@ -340,11 +341,6 @@ class Cube {
         this.paths = Cube.cubePaths(x - this.xComplement, y - this.yComplement);
     }
 
-    static isInPath(cube, x, y) {
-        const [, , , backdrop] = cube.paths;
-        return ctx.isPointInPath(backdrop, x, y);
-    }
-
     static addCubes(toAdd, toBeAddedTo) {
         toBeAddedTo.value *= 2;
         toAdd.disabled = true;
@@ -470,25 +466,10 @@ class ControlManager {
     #selectedCubeIndex = -1;
     #hoverOverCubeIndex = -1;
 
-    constructor(cubeManager) {
+    constructor(cubeManager, gameView) {
         this.cubeManager = cubeManager;
+        this.gameView = gameView;
         this.reset();
-    }
-
-    reset() {
-        this.selectedCubeIndex = -1;
-        this.hoverOverCubeIndex = -1;
-
-        this.selectedCubeChanged = false;
-        this.draggingInProgress = false;
-        this.interactionWithSelectedCube = false;
-
-        this.dragStart = null;
-        this.dragEnd = null;
-
-        this.on('touchstart mousedown', canvas, this.interactionStartHandler);
-        this.on('touchend mouseup', document, this.interactionEndHandler);
-        this.on('blur', window, this.interactionEndHandler);
     }
 
     set selectedCubeIndex(index = -1) {
@@ -531,13 +512,37 @@ class ControlManager {
         return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
     }
 
+    reset() {
+        this.selectedCubeIndex = -1;
+        this.hoverOverCubeIndex = -1;
+
+        this.selectedCubeChanged = false;
+        this.draggingInProgress = false;
+        this.interactionWithSelectedCube = false;
+
+        this.dragStart = null;
+        this.dragEnd = null;
+
+        this.on('touchstart mousedown', canvas, this.interactionStartHandler);
+        this.on('touchend mouseup', document, this.interactionEndHandler);
+        this.on('blur', window, this.interactionEndHandler);
+    }
+
+    cubeInPosition(x, y, ignoreIndex) {
+        const cubes = this.cubeManager.cubes.filter((_, index) => index != ignoreIndex);
+        const cubesInPosition = this.gameView.cubesInPosition(cubes, x, y);
+        const cubeInPositionIndex = this.cubeManager.closestCubeInPositionIndex(cubesInPosition);
+
+        return cubeInPositionIndex;
+    }
+
     interactionStartHandler = (event) => {
         if (event.target != canvas) return;
 
         this.selectedCubeChanged = false;
         this.on('touchmove mousemove', canvas, this.draggingHandler);
         const [x, y] = this.resolveEventPositionOnCanvas(event);
-        const cubeIndex = this.cubeManager.cubeInPosition(x, y);
+        const cubeIndex = this.cubeInPosition(x, y);
 
         this.dragStart = [x, y];
 
@@ -563,7 +568,7 @@ class ControlManager {
 
             this.selectedCube.updatePosition(...position);
 
-            this.hoverOverCubeIndex = this.cubeManager.cubeInPosition(...position, this.selectedCubeIndex);
+            this.hoverOverCubeIndex = this.cubeInPosition(...position, this.selectedCubeIndex);
             if (this.hoverOverCube && this.cubeManager.canCombine(this.selectedCubeIndex, this.hoverOverCubeIndex)) {
                 this.hoverOverCube.enableStroke();
                 this.selectedCube.enableStroke();
@@ -582,7 +587,7 @@ class ControlManager {
     interactionEndHandler = (event) => {
         const [x, y] = this.resolveEventPositionOnCanvas(event);
 
-        const cubeIndex = this.cubeManager.cubeInPosition(x, y, this.selectedCubeIndex);
+        const cubeIndex = this.cubeInPosition(x, y, this.selectedCubeIndex);
 
         const isDragging = this.draggingInProgress;
         const isDraggingClose = isDragging && this.dragDistance <= MIN_DRAG_DISTANCE;
@@ -647,8 +652,22 @@ class GameView {
         this.rotation = 0;
     }
 
+    reset() {
+        this.clear();
+        this.rotation = 0;
+    }
+
     clear() {
         this.ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+    }
+
+    cubesInPosition(cubes, x, y) {
+        const cubesInPosition = [];
+        for (let cube of cubes) {
+            const [, , , backdrop] = cube.paths;
+            if (this.ctx.isPointInPath(backdrop, x, y)) cubesInPosition.push(cube);
+        }
+        return cubesInPosition;
     }
 
     drawScoreBoard(score, seed) {
@@ -703,13 +722,13 @@ class GameView {
     }
 
     drawRotatingCube(cube) {
-        ctx.translate(cube.x + CUBE_WIDTH / 2, cube.y + CUBE_HEIGHT / 2);
-        ctx.rotate(Math.PI / 180 * this.rotation);
-        ctx.translate(-(cube.x + CUBE_WIDTH / 2), -(cube.y + CUBE_HEIGHT / 2));
+        this.ctx.translate(cube.x + CUBE_WIDTH / 2, cube.y + CUBE_HEIGHT / 2);
+        this.ctx.rotate(Math.PI / 180 * this.rotation);
+        this.ctx.translate(-(cube.x + CUBE_WIDTH / 2), -(cube.y + CUBE_HEIGHT / 2));
         this.rotation += 0.05;
         if (this.rotation == 360) this.rotation = 0;
         this.drawCube(cube);
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
 }
 
