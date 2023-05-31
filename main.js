@@ -64,7 +64,7 @@ class Game {
 
         this.gameView.clear();
         this.gameView.drawScoreBoard(score, seed);
-        if (!hasWon && !hasLost) {
+        if (!hasWon) {
             const activeCube = cubes[selectedCubeIndex];
             const nonActiveCubes = remainingCubes.filter(cube => cube != activeCube);
 
@@ -74,9 +74,11 @@ class Game {
             } else {
                 this.gameView.drawCubes(remainingCubes);
             }
+            if (hasLost) {
+                this.controlManager.stopListening();
+            }
         }
         if (hasWon) this.gameView.drawWinScreen(remainingCubes);
-        // if (hasLost) this.gameView.drawLoseScreen(cubes);
     }
 
     loop(disable = false) {
@@ -508,6 +510,21 @@ class ControlManager {
         return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
     }
 
+    startListening() {
+        this.stopListening();
+
+        this.on('touchstart mousedown', canvas, this.interactionStartHandler);
+        this.on('touchend mouseup', document, this.interactionEndHandler);
+        this.on('blur', window, this.interactionEndHandler);
+    }
+
+    stopListening() {
+        this.off('touchstart mousedown', canvas, this.interactionStartHandler);
+        this.off('touchmove mousemove', canvas, this.draggingHandler);
+        this.off('touchend mouseup', document, this.interactionEndHandler);
+        this.off('blur', window, this.interactionEndHandler);
+    }
+
     reset() {
         this.selectedCubeIndex = -1;
         this.hoverOverCubeIndex = -1;
@@ -519,9 +536,7 @@ class ControlManager {
         this.dragStart = null;
         this.dragEnd = null;
 
-        this.on('touchstart mousedown', canvas, this.interactionStartHandler);
-        this.on('touchend mouseup', document, this.interactionEndHandler);
-        this.on('blur', window, this.interactionEndHandler);
+        this.startListening();
     }
 
     cubeInPosition(x, y, ignoreIndex) {
