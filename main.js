@@ -86,12 +86,15 @@ class Game {
     addControls() {
         const handlersMap = {
             '.controls-back': () => {
+                this.controlManager.reset();
                 this.cubeManager.popHistory();
             },
             '.controls-reset': () => {
+                this.controlManager.reset();
                 this.cubeManager.startNewGame();
             },
             '.controls-seed': () => {
+                this.controlManager.reset();
                 this.manualSeed();
             },
             '.controls-share': () => {
@@ -468,10 +471,10 @@ class ControlManager {
 
     constructor(cubeManager) {
         this.cubeManager = cubeManager;
-        this.init();
+        this.reset();
     }
 
-    init() {
+    reset() {
         this.selectedCubeIndex = -1;
         this.hoverOverCubeIndex = -1;
 
@@ -495,12 +498,7 @@ class ControlManager {
         }
 
         this.#selectedCubeIndex = index;
-        const currentCube = this.selectedCube;
-        if (currentCube) {
-            currentCube.enableDragging();
-            currentCube.enableStroke();
-        }
-
+        if (this.selectedCube) this.selectedCube.enableDragging();
         this.selectedCubeChanged = true;
     }
 
@@ -513,11 +511,7 @@ class ControlManager {
     }
 
     set hoverOverCubeIndex(index = -1) {
-        const previousCube = this.hoverOverCube;
-        if (previousCube) {
-            previousCube.disableStroke();
-        }
-
+        if (this.hoverOverCube) this.hoverOverCube.disableStroke();
         this.#hoverOverCubeIndex = index;
     }
 
@@ -552,7 +546,7 @@ class ControlManager {
     draggingHandler = (event) => {
         const position = this.resolveEventPositionOnCanvas(event);
 
-        this.selectedCube.disableStroke();
+        if (this.selectedCube) this.selectedCube.disableStroke();
         this.hoverOverCubeIndex = -1;
 
         if (this.draggingInProgress) {
@@ -580,16 +574,15 @@ class ControlManager {
         const [x, y] = this.resolveEventPositionOnCanvas(event);
 
         const cubeIndex = this.cubeManager.cubeInPosition(x, y, this.selectedCubeIndex);
-        if (this.draggingInProgress && this.dragDistance > 10) {
+
+        const isDragging = this.draggingInProgress;
+        const isDraggingClose = isDragging && this.dragDistance <= 10;
+        const isNotDraggingOrDraggingClose = (!isDragging || isDraggingClose) && !this.selectedCubeChanged;
+        const isDraggingFar = isDragging && this.dragDistance > 10;
+
+        if (isDraggingFar || isNotDraggingOrDraggingClose) {
             this.cubeManager.combineCubes(this.selectedCubeIndex, cubeIndex);
             this.selectedCubeIndex = -1;
-        }
-
-        if (!this.draggingInProgress || (this.draggingInProgress && this.dragDistance <= 10)) {
-            if (!this.selectedCubeChanged) {
-                this.cubeManager.combineCubes(this.selectedCubeIndex, cubeIndex);
-                this.selectedCubeIndex = -1;
-            }
         }
 
         if (this.selectedCube) {
