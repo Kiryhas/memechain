@@ -247,55 +247,34 @@ class CubeManager {
         return cubeAboveIndex != -1 && cubeAboveIndex != ignoreIndex && !cubeAbove.disabled;
     }
 
-    coveringCubes(cube) {
-        const { coordinates: [x, y, z] } = cube;
-        if (x == 1) return [];
-        const activeCubesAbove = this.cubes.filter(activeCube => !activeCube.disabled && activeCube.coordinates[0] == x - 1 && activeCube != cube);
+    isCubeCovered(index) {
+        const { coordinates } = this.getCube(index);
+        const [x, y, z] = coordinates;
 
-        const cubeFilter = (y, z) => ({ coordinates: [, cubeY, cubeZ] }) => cubeY == y && cubeZ == z;
-        const topCubeFilter = cubeFilter(y + 2, z + 1);
-        const leftCubeFilter = cubeFilter(y + 1, z);
-        const rightCubeFilter = cubeFilter(y + 1, z + 1);
+        const cubeRight = this.cubes.find(Cube.positionMatcher(x + 1, y + 1, z));
+        const cubeLeft = this.cubes.find(Cube.positionMatcher(x, y + 1, z + 1));
+        const cubeInFront = this.cubes.find(Cube.positionMatcher(x + 1, y + 1, z + 1));
 
-        return [activeCubesAbove.find(topCubeFilter), activeCubesAbove.find(leftCubeFilter), activeCubesAbove.find(rightCubeFilter)];
+        return (cubeInFront && !cubeInFront.disabled) || (cubeRight && cubeLeft && !cubeRight.disabled && !cubeLeft.disabled);
     }
 
-    thereArePossibleCombinations() {
-        const freeCubes = this.cubes.filter(cube => !cube.disabled && !this.cubeIsCovered(cube)).filter(cube => {
-            const coveringCubes = this.coveringCubes(cube);
-            const { length } = coveringCubes.filter(Boolean);
-            if (length) {
-                if (length == 3) return false;
+    areMovesAvailable() {
+        const freeCubes = this.cubes.filter((cube, index) => !cube.disabled && !this.hasCubeAbove(index))
+            .filter(cube => !this.isCubeCovered(this.cubes.indexOf(cube)));
 
-                const [top, left, right] = coveringCubes;
+        const freeCubeIndexes = freeCubes.map(cube => this.cubes.indexOf(cube));
 
-                if (top && (!left || !right)) return !this.cubeIsCovered(top) && Cube.canBeCombined(cube, top);
-                if (!top && left && right) return ((!this.cubeIsCovered(left) && Cube.canBeCombined(cube, left))
-                    || (!this.cubeIsCovered(right) && Cube.canBeCombined(cube, right)));
-            }
-
-            return true;
-        });
-        for (let i = 0; i < freeCubes.length; i++) {
-            for (let j = i + 1; j < freeCubes.length; j++) {
-                if (Cube.canBeCombined(freeCubes[i], freeCubes[j])) return true;
-            }
-        }
-
-        return freeCubes.some(cube => {
+        const areMovesAvailable = freeCubes.some(cube => {
+            const index = this.cubes.indexOf(cube);
             const { coordinates: [x, y, z] } = cube;
-            if (x == 6) return false;
-            const cubeBelow = this.cubes.find(cubeBelow => {
-                const { coordinates: [xBelow, yBelow, zBelow] } = cubeBelow;
-                return x + 1 == xBelow && y == yBelow && z == zBelow;
-            });
-            const cubeInFront = this.cubes.find(cube => {
-                const { coordinates: [frontalX, frontalY, frontalZ] } = cube;
-                return frontalX === x && frontalY === y + 1 && frontalZ === z;
-            });
 
-            return !cubeInFront && Cube.canBeCombined(cubeBelow, cube);
+            const cubeBelow = this.cubes.find(Cube.positionMatcher(x, y - 1, z));
+            const cubeBelowIndex = this.cubes.indexOf(cubeBelow);
+
+            return [cubeBelowIndex, ...freeCubeIndexes].some(freeCubeIndex => this.canCombine(index, freeCubeIndex));
         });
+
+        return areMovesAvailable;
     }
 }
 
@@ -703,7 +682,8 @@ class GameView {
         }
     }
 
-    drawCube({ x, y, paths, color, value, stroke, opacity = 1 }) {
+    drawCube(cube) {
+        const { x, y, paths, color, value, stroke, opacity = 1 } = cube;
         const [top, left, right, backdrop] = paths;
         const [topColor, leftColor, rightColor] = CUBE_COLORS[color];
 
@@ -730,6 +710,7 @@ class GameView {
 
         this.ctx.fillStyle = '#000';
         this.ctx.fillText(value, x + CUBE_WIDTH / 2, y + (CUBE_HEIGHT / 64 * 5));
+        // this.ctx.fillText(cube.coordinates, x + CUBE_WIDTH / 2, y + (CUBE_HEIGHT / 64 * 5));
     }
 
     drawRotatingCube(cube) {
