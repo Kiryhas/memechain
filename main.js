@@ -39,11 +39,13 @@ class Game {
         const cubeManager = new CubeManager(shuffler);
         const gameView = new GameView(ctx, canvasWidth, canvasHeight);
         const controlManager = new ControlManager(cubeManager, gameView);
+        const solver = new DFSSolver(cubeManager);
 
         this.shuffler = shuffler;
         this.cubeManager = cubeManager;
         this.gameView = gameView;
         this.controlManager = controlManager;
+        this.solver = solver;
 
         this.queryStringSeed();
 
@@ -166,6 +168,7 @@ class CubeManager {
         this.#cubes = cubes;
     }
 
+
     resetGame() {
         this.hasWon = false;
         this.hasLost = false;
@@ -177,6 +180,11 @@ class CubeManager {
         this.resetGame();
         this.shuffler.setSeed(seed);
         [this.cubes, this.seed] = this.shuffler.generateNewGame(seed);
+    }
+
+    restart() {
+        this.resetGame();
+        this.startNewGame(this.seed);
     }
 
     closestCubeInPositionIndex(cubesInPosition) {
@@ -207,7 +215,7 @@ class CubeManager {
             this.hasWon = true;
             // this.stopListeningToCubeEvents();
         } else if (!this.hasLost && !this.areMovesAvailable()) {
-            alert(`Game Over \nScore: ${this.score}`);
+            // alert(`Game Over \nScore: ${this.score}`);
             this.hasLost = true;
         }
     }
@@ -266,24 +274,61 @@ class CubeManager {
         return (cubeInFront && !cubeInFront.disabled) || (cubeRight && cubeLeft && !cubeRight.disabled && !cubeLeft.disabled);
     }
 
-    areMovesAvailable() {
+    getFreeCubes() {
         const freeCubes = this.cubes.filter((cube, index) => !cube.disabled && !this.hasCubeAbove(index))
             .filter(cube => !this.isCubeCovered(this.cubes.indexOf(cube)));
 
+        return freeCubes;
+    }
+
+    getAvailableMoves(breakOnFirstEntry = true) {
+        const freeCubes = this.getFreeCubes();
         const freeCubeIndexes = freeCubes.map(cube => this.cubes.indexOf(cube));
 
-        const areMovesAvailable = freeCubes.some(cube => {
+        const availableMoves = [];
+
+        for (let cube of freeCubes) {
             const index = this.cubes.indexOf(cube);
             const { coordinates: [x, y, z] } = cube;
 
             const cubeBelow = this.cubes.find(Cube.positionMatcher(x, y - 1, z));
             const cubeBelowIndex = this.cubes.indexOf(cubeBelow);
 
-            return [cubeBelowIndex, ...freeCubeIndexes].some(freeCubeIndex => this.canCombine(index, freeCubeIndex));
-        });
+            const cubeIndexesToCheckAgainst = [cubeBelowIndex, ...freeCubeIndexes];
 
+            for (let freeCubeIndex of cubeIndexesToCheckAgainst) {
+                if (this.canCombine(index, freeCubeIndex)) {
+                    availableMoves.push([index, freeCubeIndex]);
+                }
+                if (availableMoves.length && breakOnFirstEntry) return availableMoves;
+            };
+        }
+
+        return availableMoves;
+    }
+
+    areMovesAvailable() {
+        const areMovesAvailable = this.getAvailableMoves().length > 0;
         return areMovesAvailable;
     }
+
+    exportGame() {
+        return {
+            seed: this.seed,
+            history: this.history.map(([a, b]) => [a, b])
+        };
+    }
+
+    importGame(game) {
+        const { seed, history } = game;
+        this.seed = seed;
+        this.restart();
+
+        for (let [toAdd, toBeAddedTo] of history) {
+            this.combineCubes(toAdd, toBeAddedTo);
+        }
+    }
+
 }
 
 class Cube {
@@ -553,7 +598,10 @@ class ControlManager {
         this.selectedCubeChanged = false;
         this.on('touchmove mousemove', canvas, this.draggingHandler);
         const [x, y] = this.resolveEventPositionOnCanvas(event);
-        const cubeIndex = this.cubeInPosition(x, y);
+        let cubeIndex = this.cubeInPosition(x, y);
+        if (this.cubeManager.hasCubeAbove(cubeIndex)) {
+            cubeIndex = -1;
+        }
 
         this.dragStart = [x, y];
 
@@ -742,6 +790,94 @@ class GameView {
         if (this.rotation == 360) this.rotation = 0;
         this.drawCube(cube);
         this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
+}
+
+class RandomSolver {
+    constructor(cubeManager) {
+        this.cubeManager = cubeManager;
+        this.reset();
+    }
+
+    get availableMoves() {
+        return this.cubeManager.getAvailableMoves(false);
+    }
+
+    get randomMove() {
+        const availableMoves = this.availableMoves;
+        const randomIndex = Math.floor(Math.random() * availableMoves.length);
+        return availableMoves[randomIndex];
+    }
+
+    reset() {
+        this.tries = 0;
+    }
+
+    solve() {
+        this.reset();
+        while (!this.cubeManager.hasWon && this.tries < 10) {
+            const randomMove = this.randomMove;
+            this.cubeManager.combineCubes(...randomMove);
+
+            if (this.cubeManager.hasLost) {
+                this.cubeManager.restart();
+                this.tries++;
+            }
+
+        }
+
+        if (this.cubeManager.hasWon) {
+            return console.log(`Solved in ${tries} tries`);
+        }
+        if (this.cubeManager.hasLost) {
+            console.log(`Couldn't solve in ${tries} tries`);
+        }
+        console.log('Out of tries');
+    }
+}
+
+class DFSSolver {
+    constructor(cubeManager) {
+        this.cubeManager = cubeManager;
+        this.seenStates = new Set();
+    }
+
+    solve() {
+        this.seenStates.clear();
+
+        const stack = [{
+            gameState: this.cubeManager.exportGame(),
+            availableMoves: this.cubeManager.getAvailableMoves(false)
+        }];
+
+        while (stack.length > 0) {
+            const { gameState, availableMoves } = stack.pop();
+            this.cubeManager.importGame(gameState);
+
+            if (this.cubeManager.hasWon) {
+                console.log('Game solved!');
+                return;
+            }
+
+            for (let move of availableMoves) {
+                this.cubeManager.combineCubes(...move);
+
+                const newGameState = this.cubeManager.exportGame();
+                const serializedState = JSON.stringify(newGameState);
+
+                if (!this.seenStates.has(serializedState)) {
+                    this.seenStates.add(serializedState);
+                    stack.push({
+                        gameState: newGameState,
+                        availableMoves: this.cubeManager.getAvailableMoves(false)
+                    });
+                }
+
+                this.cubeManager.importGame(gameState); // Undo the move
+            }
+        }
+
+        console.log('No solution found.');
     }
 }
 
