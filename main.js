@@ -837,13 +837,15 @@ class RandomSolver {
 }
 
 class DFSSolver {
-    constructor(cubeManager) {
+    constructor(cubeManager, maxIterations = 53) {
         this.cubeManager = cubeManager;
-        this.seenStates = new Set();
+        this.maxIterations = maxIterations;
     }
 
-    solve() {
-        this.seenStates.clear();
+    solve(maxIterations = this.maxIterations) {
+        let iterations = 0;
+        const seenStates = new Set();
+        seenStates.clear();
 
         const stack = [{
             gameState: this.cubeManager.exportGame(),
@@ -851,12 +853,17 @@ class DFSSolver {
         }];
 
         while (stack.length > 0) {
+            if (iterations++ >= maxIterations) {
+                console.log(`Search terminated due to reaching max iterations(${iterations}).`);
+                return false;
+            }
+
             const { gameState, availableMoves } = stack.pop();
             this.cubeManager.importGame(gameState);
 
             if (this.cubeManager.hasWon) {
-                console.log('Game solved!');
-                return;
+                console.log(`Game solved in ${iterations} iterations.`);
+                return { ...gameState, iterations };
             }
 
             for (let move of availableMoves) {
@@ -865,8 +872,8 @@ class DFSSolver {
                 const newGameState = this.cubeManager.exportGame();
                 const serializedState = JSON.stringify(newGameState);
 
-                if (!this.seenStates.has(serializedState)) {
-                    this.seenStates.add(serializedState);
+                if (!seenStates.has(serializedState)) {
+                    seenStates.add(serializedState);
                     stack.push({
                         gameState: newGameState,
                         availableMoves: this.cubeManager.getAvailableMoves(false)
@@ -878,7 +885,29 @@ class DFSSolver {
         }
 
         console.log('No solution found.');
+        return false;
     }
 }
 
 const game = new Game();
+
+window.startSolve = () => {
+    let stop = false;
+    let timeoutID = null;
+    window.stopSolve = () => stop = true;
+    let solvedSeeds = [];
+
+
+    const solve = () => {
+        if (solvedSeeds.length >= 10) stop = true;
+
+        game.cubeManager.startNewGame();
+        console.log('Starting new game', game.cubeManager.seed);
+        const result = game.solver.solve();
+        if (result) solvedSeeds.push(result);
+
+        if (!stop) timeoutID = setTimeout(solve, 1);
+        if (stop) console.log(solvedSeeds);
+    }
+    solve();
+}
