@@ -312,38 +312,46 @@ class CubeManager {
         return areMovesAvailable;
     }
 
-    exportGame() {
+    export() {
         return {
             seed: this.seed,
-            history: this.history.map(([a, b]) => [a, b])
+            history: this.history.map(([a, b]) => [a, b]),
+            cubes: this.cubes.map(Cube.export),
+            score: this.score,
+            hasWon: this.hasWon,
+            hasLost: this.hasLost,
         };
     }
 
-    importGame(game) {
-        const { seed, history } = game;
+    import(game) {
+        this.resetGame();
+        const { seed, history, cubes, score, hasWon, hasLost } = game;
         this.seed = seed;
-        this.restart();
-
-        for (let [toAdd, toBeAddedTo] of history) {
-            this.combineCubes(toAdd, toBeAddedTo);
-        }
+        this.history = history;
+        this.cubes = cubes.map(Cube.import);
+        this.score = score;
+        this.hasWon = hasWon;
+        this.hasLost = hasLost;
     }
-
 }
 
 class Cube {
-    constructor(x = 0, y = 0, z = 0, value = 2, color = 0) {
-        this.disabled = false;
-        this.dragging = false;
-        this.stroke = false;
-        this.x = x;
-        this.y = y;
-        this.z = z;
+    constructor(x = 0, y = 0, z = 0, value = 2, color = 0, disabled = false) {
+        this.coordinates = [x, y, z];
         this.value = value;
         this.color = color;
-        this.paths = null;
+        this.disabled = disabled;
+        this.stroke = false;
+
         this.xComplement = 0;
         this.yComplement = 0;
+        this.setComplement()
+
+        this.x = 0;
+        this.y = 0;
+        this.paths = null;
+        this.resetPosition();
+
         this.rotation = 0;
         this.opacity = 1;
     }
@@ -378,6 +386,16 @@ class Cube {
         this.x = x - this.xComplement;
         this.y = y - this.yComplement;
         this.paths = Cube.cubePaths(x - this.xComplement, y - this.yComplement);
+    }
+
+    static import(cube) {
+        const { coordinates, value, color, disabled } = cube;
+        return new Cube(...coordinates, value, color, disabled);
+    }
+
+    static export(cube) {
+        const { coordinates, value, color, disabled } = cube;
+        return { coordinates, value, color, disabled };
     }
 
     static positionMatcher(x, y, z) {
@@ -857,15 +875,17 @@ class DFSSolver {
         this.maxIterations = maxIterations;
     }
 
-    solve(maxIterations = this.maxIterations) {
-        let iterations = 0;
+    async solve(maxIterations = this.maxIterations) {
         const seenStates = new Set();
-        seenStates.clear();
+        const stack = [];
+        let iterations = 0;
 
-        const stack = [{
-            gameState: this.cubeManager.exportGame(),
-            availableMoves: this.cubeManager.getAvailableMoves(false)
-        }];
+        const game = this.cubeManager.export();
+        const availableMoves = this.cubeManager.getAvailableMoves(false);
+        stack.push({
+            game,
+            availableMoves
+        });
 
         while (stack.length > 0) {
             if (iterations++ >= maxIterations) {
@@ -873,56 +893,44 @@ class DFSSolver {
                 return false;
             }
 
-            const { gameState, availableMoves } = stack.pop();
-            this.cubeManager.importGame(gameState);
+            console.log(iterations, stack.length);
 
-            if (this.cubeManager.hasWon) {
-                console.log(`Game solved in ${iterations} iterations.`);
-                return { ...gameState, iterations };
-            }
+            const result = await new Promise(resolve => {
+                setTimeout(async () => {
+                    resolve(await this.dfs(stack, seenStates))
+                }, 0)
+            });
 
-            for (let move of availableMoves) {
-                this.cubeManager.combineCubes(...move);
-
-                const newGameState = this.cubeManager.exportGame();
-                const serializedState = JSON.stringify(newGameState);
-
-                if (!seenStates.has(serializedState)) {
-                    seenStates.add(serializedState);
-                    stack.push({
-                        gameState: newGameState,
-                        availableMoves: this.cubeManager.getAvailableMoves(false)
-                    });
-                }
-
-                this.cubeManager.importGame(gameState); // Undo the move
-            }
+            if (result) return result;
         }
 
         console.log('No solution found.');
         return false;
     }
-}
 
-const game = new Game();
+    async dfs(stack, seenStates) {
+        const { game, availableMoves } = stack.pop();
 
-window.startSolve = () => {
-    let stop = false;
-    let timeoutID = null;
-    window.stopSolve = () => stop = true;
-    let solvedSeeds = [];
+        this.cubeManager.import(game);
+        if (this.cubeManager.hasWon) return game;
 
+        for (let move of availableMoves) {
+            this.cubeManager.combineCubes(...move);
 
-    const solve = () => {
-        if (solvedSeeds.length >= 10) stop = true;
+            const newGame = this.cubeManager.export();
+            const serializedGame = JSON.stringify(game);
 
-        game.cubeManager.startNewGame();
-        console.log('Starting new game', game.cubeManager.seed);
-        const result = game.solver.solve();
-        if (result) solvedSeeds.push(result);
+            if (!seenStates.has(serializedGame)) {
+                seenStates.add(serializedGame);
+                stack.push({
+                    game: newGame,
+                    availableMoves: this.cubeManager.getAvailableMoves(false)
+                });
+            }
 
-        if (!stop) timeoutID = setTimeout(solve, 1);
-        if (stop) console.log(solvedSeeds);
+            this.cubeManager.import(game);
+        }
     }
-    solve();
 }
+
+game = new Game();
