@@ -438,9 +438,10 @@ class Cube {
 }
 
 class BasicShuffler {
-    constructor(seed, numberOfColors = 4, values = [32, 32, 16, 8, 8, 8, 4, 4, 4, 4, 2, 2, 2, 2]) {
+    constructor(seed, legacyMode = false, numberOfColors = 4, values = [32, 32, 16, 8, 8, 8, 4, 4, 4, 4, 2, 2, 2, 2]) {
         this.numberOfColors = numberOfColors;
         this.values = values;
+        this.legacyMode = legacyMode;
         this.setSeed(seed ? seed : this.getRandomSeed());
     }
 
@@ -484,6 +485,20 @@ class BasicShuffler {
     }
 
     initPositions() {
+        if (this.legacyMode) {
+            let cubeIndex = 0;
+            for (let y = 0; y < 6; y++) {
+                for (let x = 0; x < 6 - y; x++) {
+                    for (let z = 0; z < 6 - x - y; z++) {
+                        this.cubes[cubeIndex].coordinates = [z, 6 - x, y - 1 - z];
+                        this.cubes[cubeIndex].resetPosition();
+                        cubeIndex++;
+                    }
+                }
+            }
+            return;
+        }
+
         let cubeIndex = 0;
         for (let y = 0; y < 6; y++) {
             for (let x = 0; x < 6 - y; x++) {
