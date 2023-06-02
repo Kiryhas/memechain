@@ -4,6 +4,7 @@ const isMobile = matchMedia('(max-width: 768px)').matches;
 const INIT_HEIGHT = 600;
 const INIT_WIDTH = 800;
 const MIN_DRAG_DISTANCE = 10;
+const NULL_ID = -1;
 let scale = 1.5;
 if (isMobile) {
     canvas.width = `${innerWidth - 10}`;
@@ -59,7 +60,7 @@ class Game {
 
     render = () => {
         const { score, seed, hasWon, hasLost, cubes } = this.cubeManager;
-        const { selectedCubeIndex, draggingInProgress } = this.controlManager;
+        const { selectedCubeId, draggingInProgress } = this.controlManager;
         const remainingCubes = cubes.filter(cube => !cube.disabled);
 
         this.loopID = requestAnimationFrame(this.render);
@@ -67,7 +68,7 @@ class Game {
         this.gameView.clear();
         this.gameView.drawScoreBoard(score, seed);
         if (!hasWon) {
-            const activeCube = cubes[selectedCubeIndex];
+            const activeCube = cubes[selectedCubeId];
             const nonActiveCubes = remainingCubes.filter(cube => cube != activeCube);
 
             if (draggingInProgress) {
@@ -148,6 +149,7 @@ class Game {
 
 class CubeManager {
     #cubes;
+    #cubesById;
 
     constructor(shuffler) {
         this.shuffler = shuffler;
@@ -160,14 +162,21 @@ class CubeManager {
         this.startNewGame();
     }
 
+    set cubes(cubes) {
+        this.#cubes = cubes;
+        this.#cubesById = this.#cubes.reduce((acc, cube) => {
+            acc[cube.id] = cube;
+            return acc;
+        }, {});
+    }
+
     get cubes() {
         return this.#cubes;
     }
 
-    set cubes(cubes) {
-        this.#cubes = cubes;
+    get cubesById() {
+        return this.#cubesById;
     }
-
 
     resetGame() {
         this.hasWon = false;
@@ -187,23 +196,21 @@ class CubeManager {
         this.startNewGame(this.seed);
     }
 
-    closestCubeInPositionIndex(cubesInPosition) {
+    closestCubeInPositionId(cubesInPosition) {
         const [cubeInPosition] = cubesInPosition
             .filter(cube => !cube.disabled)
             .sort(({ coordinates: [xA, yA, zA] }, { coordinates: [xB, yB, zB] }) => xB + yB + zB - xA - yA - zA);
 
-        return this.cubes.indexOf(cubeInPosition);
+        if (!cubeInPosition) return NULL_ID;
+
+        return cubeInPosition.id;
     }
 
-    getCube(index) {
-        return this.cubes[index];
-    }
-
-    combineCubes(toAddIndex, toBeAddedToIndex) {
-        if (this.canCombine(toAddIndex, toBeAddedToIndex)) {
-            const [toAdd, toBeAddedTo] = [this.getCube(toAddIndex), this.getCube(toBeAddedToIndex)];
+    combineCubes(toAddId, toBeAddedToId) {
+        if (this.canCombine(toAddId, toBeAddedToId)) {
+            const [toAdd, toBeAddedTo] = [this.cubesById[toAddId], this.cubesById[toBeAddedToId]];
             Cube.addCubes(toAdd, toBeAddedTo);
-            this.historyPush(toAddIndex, toBeAddedToIndex);
+            this.historyPush(toAddId, toBeAddedToId);
             this.addScore(toAdd.value);
             return true;
         }
@@ -232,39 +239,46 @@ class CubeManager {
         this.score -= n * 10;
     }
 
-    historyPush(toAddIndex, toBeAddedToIndex) {
-        this.history.push([toAddIndex, toBeAddedToIndex]);
+    historyPush(toAddId, toBeAddedToId) {
+        this.history.push([toAddId, toBeAddedToId]);
         this.updateGameStatus();
     }
 
     historyPop() {
         if (this.history.length && !this.hasWon) {
             const [toAdd, addedTo] = this.history.pop();
-            Cube.revertAddition(this.getCube(toAdd), this.getCube(addedTo));
+            Cube.revertAddition(this.cubesById[toAdd], this.cubesById[addedTo]);
             this.subtractScore(this.cubes[toAdd].value);
             if (this.hasLost) this.hasLost = false;
         }
         this.updateGameStatus();
     }
 
-    canCombine(toAddIndex, toBeAddedToIndex) {
-        if (toAddIndex == -1 || toBeAddedToIndex == -1 || toAddIndex == toBeAddedToIndex) return false;
-        if (this.hasCubeAbove(toBeAddedToIndex, toAddIndex)) return false;
+    canCombine(toAddId, toBeAddedToId) {
+        if (toAddId == NULL_ID || toBeAddedToId == NULL_ID || toAddId == toBeAddedToId) return false;
+        if (this.hasCubeAbove(toBeAddedToId, toAddId)) return false;
+        if (this.hasCubeAbove(toAddId)) return false;
 
-        const [toAdd, toBeAddedTo] = [this.getCube(toAddIndex), this.getCube(toBeAddedToIndex)];
+        const [toAdd, toBeAddedTo] = [this.cubesById[toAddId], this.cubesById[toBeAddedToId]];
         return Cube.canBeCombined(toAdd, toBeAddedTo);
     }
 
-    hasCubeAbove(index, ignoreIndex) {
-        const { coordinates: [x, y, z] } = this.getCube(index);
-        const cubeAbove = this.cubes.find(Cube.positionMatcher(x, y + 1, z));
-        const cubeAboveIndex = this.cubes.indexOf(cubeAbove);
+    hasCubeAbove(id, ignoreId) {
+        const cube = this.cubesById[id];
+        if (!cube) return false;
+        const { coordinates: [x, y, z] } = cube;
 
-        return cubeAboveIndex != -1 && cubeAboveIndex != ignoreIndex && !cubeAbove.disabled;
+        const cubeAbove = this.cubes.find(Cube.positionMatcher(x, y + 1, z));
+        if (!cubeAbove) return false;
+
+        const cubeAboveId = cubeAbove.id;
+        return cubeAboveId != ignoreId && !cubeAbove.disabled;
     }
 
-    isCubeCovered(index) {
-        const { coordinates } = this.getCube(index);
+    isCubeCovered(id) {
+        const cube = this.cubesById[id];
+        if (!cube) return true;
+        const { coordinates } = cube;
         const [x, y, z] = coordinates;
 
         const cubeRight = this.cubes.find(Cube.positionMatcher(x + 1, y + 1, z));
@@ -275,30 +289,31 @@ class CubeManager {
     }
 
     getFreeCubes() {
-        const freeCubes = this.cubes.filter((cube, index) => !cube.disabled && !this.hasCubeAbove(index))
-            .filter(cube => !this.isCubeCovered(this.cubes.indexOf(cube)));
+        const freeCubes = this.cubes.filter((cube) => {
+            return !cube.disabled && !this.hasCubeAbove(cube.id) && !this.isCubeCovered(cube.id)
+        });
 
         return freeCubes;
     }
 
     getAvailableMoves(breakOnFirstEntry = true) {
         const freeCubes = this.getFreeCubes();
-        const freeCubeIndexes = freeCubes.map(cube => this.cubes.indexOf(cube));
 
         const availableMoves = [];
 
         for (let cube of freeCubes) {
-            const index = this.cubes.indexOf(cube);
+            const id = cube.id;
             const { coordinates: [x, y, z] } = cube;
 
             const cubeBelow = this.cubes.find(Cube.positionMatcher(x, y - 1, z));
-            const cubeBelowIndex = this.cubes.indexOf(cubeBelow);
+            const cubeBelowId = cubeBelow ? cubeBelow.id : NULL_ID;
 
-            const cubeIndexesToCheckAgainst = [cubeBelowIndex, ...freeCubeIndexes];
+            let checkAgainst = freeCubes.map(cube => cube.id);
+            if (cubeBelowId != NULL_ID) checkAgainst.push(cubeBelowId);
 
-            for (let freeCubeIndex of cubeIndexesToCheckAgainst) {
-                if (this.canCombine(index, freeCubeIndex)) {
-                    availableMoves.push([index, freeCubeIndex]);
+            for (let checkAgainstId of checkAgainst) {
+                if (this.canCombine(id, checkAgainstId)) {
+                    availableMoves.push([id, checkAgainstId]);
                 }
                 if (availableMoves.length && breakOnFirstEntry) return availableMoves;
             };
@@ -336,7 +351,8 @@ class CubeManager {
 }
 
 class Cube {
-    constructor(x = 0, y = 0, z = 0, value = 2, color = 0, disabled = false) {
+    constructor(id = NULL_ID, x = 0, y = 0, z = 0, value = 2, color = 0, disabled = false) {
+        this.id = id;
         this.coordinates = [x, y, z];
         this.value = value;
         this.color = color;
@@ -389,13 +405,13 @@ class Cube {
     }
 
     static import(cube) {
-        const { coordinates, value, color, disabled } = cube;
-        return new Cube(...coordinates, value, color, disabled);
+        const { id, coordinates, value, color, disabled } = cube;
+        return new Cube(id, ...coordinates, value, color, disabled);
     }
 
     static export(cube) {
-        const { coordinates, value, color, disabled } = cube;
-        return { coordinates, value, color, disabled };
+        const { id, coordinates, value, color, disabled } = cube;
+        return { id, coordinates, value, color, disabled };
     }
 
     static positionMatcher(x, y, z) {
@@ -480,7 +496,7 @@ class BasicShuffler {
 
     generateCubes() {
         this.cubes = [...Array(this.numberOfColors).keys()].flatMap(group => (
-            this.values.map(value => new Cube(0, 0, 0, value, group))
+            this.values.map(value => new Cube(NULL_ID, 0, 0, 0, value, group))
         ));
     }
 
@@ -503,30 +519,34 @@ class BasicShuffler {
     }
 
     initPositions() {
+        let id = 0;
+
         if (this.legacyMode) {
-            let cubeIndex = 0;
             for (let y = 0; y < 6; y++) {
                 for (let x = 0; x < 6 - y; x++) {
                     for (let z = 0; z < 6 - x - y; z++) {
-                        this.cubes[cubeIndex].coordinates = [z, 6 - x, y - 1 - z];
-                        this.cubes[cubeIndex].resetPosition();
-                        cubeIndex++;
+                        this.initCube(id, z, 6 - x, y - 1 - z);
+                        id++;
                     }
                 }
             }
             return;
         }
 
-        let cubeIndex = 0;
         for (let y = 0; y < 6; y++) {
             for (let x = 0; x < 6 - y; x++) {
                 for (let z = 0; z < 6 - x - y; z++) {
-                    this.cubes[cubeIndex].coordinates = [x, y, z];
-                    this.cubes[cubeIndex].resetPosition();
-                    cubeIndex++;
+                    this.initCube(id, x, y, z);
+                    id++;
                 }
             }
         }
+    }
+
+    initCube(id, x, y, z) {
+        this.cubes[id].coordinates = [x, y, z];
+        this.cubes[id].id = id;
+        this.cubes[id].resetPosition();
     }
 
     generateNewGame() {
@@ -539,8 +559,8 @@ class BasicShuffler {
 }
 
 class ControlManager {
-    #selectedCubeIndex = -1;
-    #hoverOverCubeIndex = -1;
+    #selectedCubeId = -1;
+    #hoverOverCubeId = -1;
 
     constructor(cubeManager, gameView) {
         this.cubeManager = cubeManager;
@@ -548,7 +568,7 @@ class ControlManager {
         this.reset();
     }
 
-    set selectedCubeIndex(index = -1) {
+    set selectedCubeId(id = NULL_ID) {
         const previousCube = this.selectedCube;
         if (previousCube) {
             previousCube.disableDragging();
@@ -556,30 +576,30 @@ class ControlManager {
             previousCube.resetPosition();
         }
 
-        this.#selectedCubeIndex = index;
+        this.#selectedCubeId = id;
         if (this.selectedCube) this.selectedCube.enableDragging();
         this.selectedCubeChanged = true;
     }
 
-    get selectedCubeIndex() {
-        return this.#selectedCubeIndex;
+    get selectedCubeId() {
+        return this.#selectedCubeId;
     }
 
     get selectedCube() {
-        return this.cubeManager.getCube(this.selectedCubeIndex);
+        return this.cubeManager.cubesById[this.selectedCubeId];
     }
 
-    set hoverOverCubeIndex(index = -1) {
+    set hoverOverCubeId(id = NULL_ID) {
         if (this.hoverOverCube) this.hoverOverCube.disableStroke();
-        this.#hoverOverCubeIndex = index;
+        this.#hoverOverCubeId = id;
     }
 
-    get hoverOverCubeIndex() {
-        return this.#hoverOverCubeIndex;
+    get hoverOverCubeId() {
+        return this.#hoverOverCubeId;
     }
 
     get hoverOverCube() {
-        return this.cubeManager.getCube(this.hoverOverCubeIndex);
+        return this.cubeManager.cubesById[this.hoverOverCubeId];
     }
 
     get dragDistance() {
@@ -604,8 +624,8 @@ class ControlManager {
     }
 
     reset() {
-        this.selectedCubeIndex = -1;
-        this.hoverOverCubeIndex = -1;
+        this.selectedCubeId = -1;
+        this.hoverOverCubeId = -1;
 
         this.selectedCubeChanged = false;
         this.draggingInProgress = false;
@@ -617,12 +637,12 @@ class ControlManager {
         this.startListening();
     }
 
-    cubeInPosition(x, y, ignoreIndex) {
-        const cubes = this.cubeManager.cubes.filter((_, index) => index != ignoreIndex);
+    cubeInPosition(x, y, ignoreId) {
+        const cubes = this.cubeManager.cubes.filter(({ id }) => id != ignoreId);
         const cubesInPosition = this.gameView.cubesInPosition(cubes, x, y);
-        const cubeInPositionIndex = this.cubeManager.closestCubeInPositionIndex(cubesInPosition);
+        const cubeInPositionId = this.cubeManager.closestCubeInPositionId(cubesInPosition);
 
-        return cubeInPositionIndex;
+        return cubeInPositionId;
     }
 
     interactionStartHandler = (event) => {
@@ -631,18 +651,18 @@ class ControlManager {
         this.selectedCubeChanged = false;
         this.on('touchmove mousemove', canvas, this.draggingHandler);
         const [x, y] = this.resolveEventPositionOnCanvas(event);
-        let cubeIndex = this.cubeInPosition(x, y);
-        if (this.cubeManager.hasCubeAbove(cubeIndex)) {
-            cubeIndex = -1;
+        let cubeId = this.cubeInPosition(x, y);
+        if (this.cubeManager.hasCubeAbove(cubeId)) {
+            cubeId = NULL_ID;
         }
 
         this.dragStart = [x, y];
 
         if (!this.selectedCube) {
-            this.selectedCubeIndex = cubeIndex;
+            this.selectedCubeId = cubeId;
         }
 
-        if (this.selectedCubeIndex == cubeIndex) {
+        if (this.selectedCubeId == cubeId) {
             this.interactionWithSelectedCube = true;
         }
     }
@@ -651,7 +671,7 @@ class ControlManager {
         const position = this.resolveEventPositionOnCanvas(event);
 
         if (this.selectedCube) this.selectedCube.disableStroke();
-        this.hoverOverCubeIndex = -1;
+        this.hoverOverCubeId = -1;
 
         if (!this.selectedCube || !this.interactionWithSelectedCube) return;
 
@@ -660,8 +680,8 @@ class ControlManager {
 
             this.selectedCube.updatePosition(...position);
 
-            this.hoverOverCubeIndex = this.cubeInPosition(...position, this.selectedCubeIndex);
-            if (this.hoverOverCube && this.cubeManager.canCombine(this.selectedCubeIndex, this.hoverOverCubeIndex)) {
+            this.hoverOverCubeId = this.cubeInPosition(...position, this.selectedCubeId);
+            if (this.hoverOverCube && this.cubeManager.canCombine(this.selectedCubeId, this.hoverOverCubeId)) {
                 this.hoverOverCube.enableStroke();
                 this.selectedCube.enableStroke();
             }
@@ -679,7 +699,7 @@ class ControlManager {
     interactionEndHandler = (event) => {
         const [x, y] = this.resolveEventPositionOnCanvas(event);
 
-        const cubeIndex = this.cubeInPosition(x, y, this.selectedCubeIndex);
+        const cubeId = this.cubeInPosition(x, y, this.selectedCubeId);
 
         const isDragging = this.draggingInProgress;
         const isDraggingClose = isDragging && this.dragDistance <= MIN_DRAG_DISTANCE;
@@ -687,8 +707,8 @@ class ControlManager {
         const isDraggingFar = isDragging && this.dragDistance > MIN_DRAG_DISTANCE;
 
         if (isDraggingFar || isNotDraggingOrDraggingClose) {
-            this.cubeManager.combineCubes(this.selectedCubeIndex, cubeIndex);
-            this.selectedCubeIndex = -1;
+            this.cubeManager.combineCubes(this.selectedCubeId, cubeId);
+            this.selectedCubeId = -1;
         }
 
         if (this.selectedCube) {
@@ -698,7 +718,7 @@ class ControlManager {
 
         if (this.hoverOverCube) {
             this.hoverOverCube.disableStroke();
-            this.hoverOverCubeIndex = -1;
+            this.hoverOverCubeId = -1;
         }
 
         this.interactionWithSelectedCube = false;
@@ -812,7 +832,7 @@ class GameView {
 
         this.ctx.fillStyle = '#000';
         this.ctx.fillText(value, x + CUBE_WIDTH / 2, y + (CUBE_HEIGHT / 64 * 5));
-        // this.ctx.fillText(cube.coordinates, x + CUBE_WIDTH / 2, y + (CUBE_HEIGHT / 64 * 5));
+        // this.ctx.fillText(cube.id, x + CUBE_WIDTH / 2, y + (CUBE_HEIGHT / 64 * 5) + 20);
     }
 
     drawRotatingCube(cube) {
@@ -893,15 +913,16 @@ class DFSSolver {
                 return false;
             }
 
-            console.log(iterations, stack.length);
-
             const result = await new Promise(resolve => {
                 setTimeout(async () => {
                     resolve(await this.dfs(stack, seenStates))
                 }, 0)
             });
 
-            if (result) return result;
+            if (result) {
+                console.log(`Solved in ${iterations} iterations.`);
+                return result;
+            }
         }
 
         console.log('No solution found.');
@@ -913,9 +934,15 @@ class DFSSolver {
 
         this.cubeManager.import(game);
         if (this.cubeManager.hasWon) return game;
+        if (this.detectUnsolvableGame()) return false;
 
+        await new Promise(resolve => setTimeout(resolve, 10));
         for (let move of availableMoves) {
             this.cubeManager.combineCubes(...move);
+            if (this.detectUnsolvableGame()) {
+                this.cubeManager.import(game);
+                continue;
+            }
 
             const newGame = this.cubeManager.export();
             const serializedGame = JSON.stringify(game);
@@ -931,6 +958,95 @@ class DFSSolver {
             this.cubeManager.import(game);
         }
     }
+
+    detectUnsolvableGame() {
+        const freeCubes = this.cubeManager.getFreeCubes();
+        const cubesByColor = this.cubeManager.cubes.reduce((acc, cube) => {
+            acc[cube.color] = acc[cube.color] || [];
+            acc[cube.color].push(cube);
+            return acc;
+        }, {});
+        let caseNumber = 0;
+
+        const unsolvable = freeCubes.some(cube => {
+            const { coordinates, value, color } = cube;
+            const [x, y, z] = coordinates;
+
+            // All checks below assume the same color as the cube we're checking
+            const cubesBelow = this.cubeManager.cubes.filter(cube => {
+                const [cubeX, cubeY, cubeZ] = cube.coordinates;
+                return cubeX === x && cubeY < y && cubeZ === z && cube.color === color;
+            });
+            const otherCubes = cubesByColor[color].filter(c => {
+                return !cubesBelow.includes(c) && c !== cube;
+            });
+
+            // Making sure there's no cube below with the same value
+            const canCombineWithCubeBelow = cubesBelow.some(cube => {
+                const [cubeX, cubeY, cubeZ] = cube.coordinates;
+                return cube.value === value && cubeX === x && cubeY === y - 1 && cubeZ === z;
+            });
+            if (canCombineWithCubeBelow) return false;
+
+            const case64 = cubesBelow.length > 0;
+            const case32 = case64 && otherCubes.filter(({ value }) => value === 64).length;
+            const case16 = case32 && otherCubes.filter(({ value }) => value === 32).length;
+            const case8 = case16 && otherCubes.filter(({ value }) => value === 16).length;
+            const case4 = case8 && otherCubes.filter(({ value }) => value === 8).length;
+            const case2 = case4 && otherCubes.filter(({ value }) => value === 4).length;
+
+            if (value === 64 && case64) {
+                // console.log('Case 64 detected');
+                caseNumber = 64;
+                return 64;
+            }
+            if (value === 32 && case32) {
+                // console.log('Case 32 detected');
+                caseNumber = 32;
+                return 32;
+            }
+            if (value === 16 && case16) {
+                // console.log('Case 16 detected');
+                caseNumber = 16;
+                return 16;
+            }
+            if (value === 8 && case8) {
+                // console.log('Case 8 detected');
+                caseNumber = 8;
+                return 8;
+            }
+            if (value === 4 && case4) {
+                // console.log('Case 4 detected');
+                caseNumber = 4;
+                return 4;
+            }
+            if (value === 2 && case2) {
+                // console.log('Case 2 detected');
+                caseNumber = 2;
+                return 2;
+            }
+        });
+
+        return unsolvable && caseNumber;
+    }
 }
 
 game = new Game();
+
+window.startSolve = async () => {
+    let stop = false;
+    window.stopSolve = () => stop = true;
+    let solvedSeeds = [];
+
+    const solve = async () => {
+        while (!stop) {
+            if (solvedSeeds.length >= 10) stop = true;
+            game.cubeManager.startNewGame();
+            console.log('Starting new game', game.cubeManager.seed);
+            const result = await game.solver.solve(100);
+            if (result) solvedSeeds.push(result);
+        }
+    }
+    if (stop) console.log(solvedSeeds);
+    solve();
+}
