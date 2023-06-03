@@ -66,7 +66,7 @@ class Game {
         this.loopID = requestAnimationFrame(this.render);
 
         this.gameView.clear();
-        this.gameView.drawScoreBoard(score, seed);
+        this.gameView.drawScoreBoard(score, seed, hasWon, hasLost);
         if (!hasWon) {
             const activeCube = cubes[selectedCubeId];
             const nonActiveCubes = remainingCubes.filter(cube => cube != activeCube);
@@ -107,6 +107,9 @@ class Game {
             },
             '.controls-share': () => {
                 this.share();
+            },
+            '.controls-solve': () => {
+                this.solve();
             }
         }
 
@@ -115,6 +118,11 @@ class Game {
             const handler = handlersMap[selector];
             this.controlManager.on('click', element, handler);
         }
+    }
+
+    solve() {
+        this.cubeManager.restart();
+        this.solver.solve(53);
     }
 
     share() {
@@ -328,25 +336,30 @@ class CubeManager {
     }
 
     export() {
+        const shortState = this.cubes
+            .filter(cube => !cube.disabled)
+            .map(Cube.export)
+            .reduce((acc, cube) => {
+                acc.push(`${cube.id};${cube.value}`);
+                return acc;
+            }, []).join(',');
+
         return {
             seed: this.seed,
-            history: this.history.map(([a, b]) => [a, b]),
-            cubes: this.cubes.map(Cube.export),
-            score: this.score,
+            history: this.history.map((entry) => Array.from(entry)),
             hasWon: this.hasWon,
             hasLost: this.hasLost,
+            shortState,
         };
     }
 
     import(game) {
-        this.resetGame();
-        const { seed, history, cubes, score, hasWon, hasLost } = game;
-        this.seed = seed;
-        this.history = history;
-        this.cubes = cubes.map(Cube.import);
-        this.score = score;
-        this.hasWon = hasWon;
-        this.hasLost = hasLost;
+        const { seed, history } = game;
+        this.startNewGame(seed);
+
+        for (let [toAddId, toBeAddedToId] of history) {
+            this.combineCubes(toAddId, toBeAddedToId);
+        }
     }
 }
 
@@ -782,14 +795,18 @@ class GameView {
         return cubesInPosition;
     }
 
-    drawScoreBoard(score, seed) {
+    drawScoreBoard(score, seed, won, lost) {
         const x = this.canvasWidth / 2;
         const y = HEIGHT_CENTER - CUBE_HEIGHT * 6;
+        const status = won ? 'won' : lost ? 'lost' : 'playing';
 
         this.ctx.font = `small-caps bolder 20px sans-serif`;
         this.ctx.fillStyle = '#fff';
         this.ctx.fillText(`score: ${score}`, x, y - 10);
         this.ctx.fillText(`seed: ${seed}`, x, y - 5 + CUBE_HEIGHT / 2);
+        if (lost) this.ctx.fillStyle = '#ff0000';
+        if (won) this.ctx.fillStyle = '#00ff00';
+        this.ctx.fillText(`status: ${status}`, x, y + CUBE_HEIGHT);
     }
 
     drawWinScreen(cubes) {
@@ -876,7 +893,6 @@ class RandomSolver {
                 this.cubeManager.restart();
                 this.tries++;
             }
-
         }
 
         if (this.cubeManager.hasWon) {
@@ -934,18 +950,24 @@ class DFSSolver {
 
         this.cubeManager.import(game);
         if (this.cubeManager.hasWon) return game;
-        if (this.detectUnsolvableGame()) return false;
+        if (this.detectUnsolvableGame()) {
+            this.skipped++;
+            return false;
+        }
 
-        await new Promise(resolve => setTimeout(resolve, 10));
-        for (let move of availableMoves) {
+        const evaluatedMoves = availableMoves.sort((a, b) => {
+            return this.evaluateMove(a) - this.evaluateMove(b);
+        });
+        for (let move of evaluatedMoves) {
             this.cubeManager.combineCubes(...move);
             if (this.detectUnsolvableGame()) {
+                this.skipped++;
                 this.cubeManager.import(game);
                 continue;
             }
 
             const newGame = this.cubeManager.export();
-            const serializedGame = JSON.stringify(game);
+            const serializedGame = newGame.shortState;
 
             if (!seenStates.has(serializedGame)) {
                 seenStates.add(serializedGame);
@@ -960,10 +982,11 @@ class DFSSolver {
     }
 
     detectUnsolvableGame() {
-        const freeCubes = this.cubeManager.getFreeCubes();
+        // const freeCubes = this.cubeManager.getFreeCubes();
+        const freeCubes = this.cubeManager.cubes.filter(cube => !cube.disabled);
         const cubesByColor = this.cubeManager.cubes.reduce((acc, cube) => {
             acc[cube.color] = acc[cube.color] || [];
-            acc[cube.color].push(cube);
+            if (!cube.disabled) acc[cube.color].push(cube);
             return acc;
         }, {});
         let caseNumber = 0;
@@ -1029,6 +1052,23 @@ class DFSSolver {
 
         return unsolvable && caseNumber;
     }
+
+    evaluateMove([idA, idB]) {
+        const hightC = 2;
+        const valueC = 1;
+
+        const cubeA = this.cubeManager.cubesById[idA];
+        const cubeB = this.cubeManager.cubesById[idB];
+
+        const heightDelta = cubeA.coordinates[1] - cubeB.coordinates[1];
+        const valueAddition = 128 - cubeA.value + cubeB.value;
+
+        const normalizedHeightDelta = heightDelta / 5;
+        const normalizedValueAddition = valueAddition / 128;
+
+        const score = hightC * normalizedHeightDelta + valueC * normalizedValueAddition;
+        return score;
+    }
 }
 
 game = new Game();
@@ -1043,7 +1083,7 @@ window.startSolve = async () => {
             if (solvedSeeds.length >= 10) stop = true;
             game.cubeManager.startNewGame();
             console.log('Starting new game', game.cubeManager.seed);
-            const result = await game.solver.solve(100);
+            const result = await game.solver.solve(54);
             if (result) solvedSeeds.push(result);
         }
     }
