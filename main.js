@@ -109,7 +109,9 @@ class Game {
                 this.share();
             },
             '.controls-solve': () => {
+                this.controlManager.stopListening();
                 this.solve();
+                this.controlManager.startListening();
             }
         }
 
