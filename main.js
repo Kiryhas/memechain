@@ -24,6 +24,9 @@ const CUBE_COLORS = [
     ['#008CC3', '#007DC8', '#0059B3'], // lighter blue
 ];
 
+
+registerServiceWorker();
+
 class Game {
     constructor() {
         this.cubeManager = new CubeManager();
@@ -546,5 +549,17 @@ function on(events, target, handler) {
 function off(events, target, handler) {
     for (const event of events.split(' ')) {
         target.removeEventListener(event, handler);
+    }
+}
+
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+            navigator.serviceWorker.register('service-worker.js').then(function (_) {
+                // success
+            }, function (_) {
+                // failed
+            });
+        });
     }
 }
